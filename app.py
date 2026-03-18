@@ -19,8 +19,11 @@ sys.stderr.reconfigure(line_buffering=True)
 # -----------------------------------------------------------------------------
 TOKEN = os.getenv("TOKEN", "")  # VK Access Token
 CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")  # VK Confirmation Token
-ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # Admin user ID for notifications
+ADMIN_IDS_STR = os.getenv("ADMIN_ID", "535097409")  # Admin IDs separated by comma
 PORT = int(os.getenv("PORT", "8080"))
+
+# Parse admin IDs from comma-separated string
+ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(",") if id.strip()]
 
 # Setup logging with forced stdout
 logging.basicConfig(
@@ -37,7 +40,7 @@ print("=" * 50, flush=True)
 print("VK BOT STARTING", flush=True)
 print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
-print(f"ADMIN_ID: {ADMIN_ID}", flush=True)
+print(f"ADMIN_IDS: {ADMIN_IDS}", flush=True)
 print(f"PORT: {PORT}", flush=True)
 print("=" * 50, flush=True)
 
@@ -173,7 +176,7 @@ class WebServer:
             "status": "ok",
             "token_configured": bool(TOKEN),
             "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
-            "admin_id_configured": bool(ADMIN_ID)
+            "admin_ids": ADMIN_IDS
         })
 
     async def vk_webhook(self, request: web.Request) -> web.Response:
@@ -252,16 +255,17 @@ class WebServer:
                     last_name = user_info["response"][0].get("last_name", "")
                     user_name = f"{first_name} {last_name}"
                 
-                # Send notification to admin
-                if ADMIN_ID:
+                # Send notification to all admins
+                if ADMIN_IDS:
                     admin_message = f"Пользователь {user_name} (ID: {user_id}) нажал 'Да'!"
-                    await self.vk_api.send_message(
-                        user_id=ADMIN_ID,
-                        message=admin_message
-                    )
-                    print(f"Notification sent to admin {ADMIN_ID}", flush=True)
+                    for admin_id in ADMIN_IDS:
+                        await self.vk_api.send_message(
+                            user_id=admin_id,
+                            message=admin_message
+                        )
+                        print(f"Notification sent to admin {admin_id}", flush=True)
                 else:
-                    print("ADMIN_ID not configured, cannot send notification", flush=True)
+                    print("ADMIN_IDS not configured, cannot send notification", flush=True)
                 
                 # Confirm to user
                 await self.vk_api.send_message(
