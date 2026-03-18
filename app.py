@@ -19,6 +19,7 @@ sys.stderr.reconfigure(line_buffering=True)
 # -----------------------------------------------------------------------------
 TOKEN = os.getenv("TOKEN", "")  # VK Access Token
 CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")  # VK Confirmation Token
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))  # Admin user ID for notifications
 PORT = int(os.getenv("PORT", "8080"))
 
 # Setup logging with forced stdout
@@ -36,7 +37,7 @@ print("=" * 50, flush=True)
 print("VK BOT STARTING", flush=True)
 print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
-print(f"CONFIRMATION_TOKEN value: {CONFIRMATION_TOKEN}", flush=True)
+print(f"ADMIN_ID: {ADMIN_ID}", flush=True)
 print(f"PORT: {PORT}", flush=True)
 print("=" * 50, flush=True)
 
@@ -106,42 +107,39 @@ class VKAPI:
             params["keyboard"] = json.dumps(keyboard, ensure_ascii=False)
         
         return await self.call("messages.send", params)
+    
+    async def get_user_info(self, user_id: int) -> Dict[str, Any]:
+        """Get user info by ID."""
+        params = {
+            "user_ids": user_id
+        }
+        result = await self.call("users.get", params)
+        return result
 
 
 # -----------------------------------------------------------------------------
-# Keyboard Builder
+# Keyboard Builders
 # -----------------------------------------------------------------------------
-def create_main_keyboard() -> Dict:
-    """Create keyboard with buttons 1, 2, 3."""
+def create_yes_no_keyboard() -> Dict:
+    """Create keyboard with buttons Да and Нет."""
     return {
-        "one_time": False,
+        "one_time": True,
         "inline": False,
         "buttons": [
             [
                 {
                     "action": {
                         "type": "text",
-                        "label": "1"
+                        "label": "Да"
                     },
-                    "color": "primary"
-                }
-            ],
-            [
+                    "color": "positive"
+                },
                 {
                     "action": {
                         "type": "text",
-                        "label": "2"
+                        "label": "Нет"
                     },
-                    "color": "primary"
-                }
-            ],
-            [
-                {
-                    "action": {
-                        "type": "text",
-                        "label": "3"
-                    },
-                    "color": "primary"
+                    "color": "negative"
                 }
             ]
         ]
@@ -174,7 +172,8 @@ class WebServer:
         return web.json_response({
             "status": "ok",
             "token_configured": bool(TOKEN),
-            "confirmation_token_configured": bool(CONFIRMATION_TOKEN)
+            "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
+            "admin_id_configured": bool(ADMIN_ID)
         })
 
     async def vk_webhook(self, request: web.Request) -> web.Response:
@@ -237,28 +236,51 @@ class WebServer:
             if text.lower() in ["начать", "start", "/start"]:
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="Добро пожаловать! Выберите один из вариантов:",
+                    message="Выберите вариант:",
                     peer_id=peer_id,
-                    keyboard=create_main_keyboard()
+                    keyboard=create_yes_no_keyboard()
                 )
                 return
             
-            # Handle button presses
-            if text in ["1", "2", "3"]:
+            # Handle "Да" button
+            if text.lower() == "да":
+                # Get user info
+                user_info = await self.vk_api.get_user_info(user_id)
+                user_name = "Пользователь"
+                if "response" in user_info and user_info["response"]:
+                    first_name = user_info["response"][0].get("first_name", "")
+                    last_name = user_info["response"][0].get("last_name", "")
+                    user_name = f"{first_name} {last_name}"
+                
+                # Send notification to admin
+                if ADMIN_ID:
+                    admin_message = f"Пользователь {user_name} (ID: {user_id}) нажал 'Да'!"
+                    await self.vk_api.send_message(
+                        user_id=ADMIN_ID,
+                        message=admin_message
+                    )
+                    print(f"Notification sent to admin {ADMIN_ID}", flush=True)
+                else:
+                    print("ADMIN_ID not configured, cannot send notification", flush=True)
+                
+                # Confirm to user
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message=f"Вы выбрали вариант: {text}",
-                    peer_id=peer_id,
-                    keyboard=create_main_keyboard()
+                    message="Спасибо за ваш ответ! Администратор получит уведомление.",
+                    peer_id=peer_id
                 )
                 return
             
-            # Default response
+            # Handle "Нет" button - do nothing
+            if text.lower() == "нет":
+                print(f"User {user_id} pressed 'Нет' - no action", flush=True)
+                return
+            
+            # Default - show keyboard again
             await self.vk_api.send_message(
                 user_id=user_id,
-                message="Выберите один из вариантов:",
-                peer_id=peer_id,
-                keyboard=create_main_keyboard()
+                message="Нажмите кнопку 'Начать' для начала работы.",
+                peer_id=peer_id
             )
             
         except Exception as e:
