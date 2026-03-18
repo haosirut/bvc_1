@@ -123,12 +123,21 @@ class VKAPI:
 # -----------------------------------------------------------------------------
 # Keyboard Builders
 # -----------------------------------------------------------------------------
-def create_yes_no_keyboard() -> Dict:
-    """Create keyboard with buttons Да and Нет."""
+def create_main_keyboard() -> Dict:
+    """Create main keyboard with Menu, Yes, No buttons. Always visible."""
     return {
-        "one_time": True,
+        "one_time": False,
         "inline": False,
         "buttons": [
+            [
+                {
+                    "action": {
+                        "type": "text",
+                        "label": "Меню"
+                    },
+                    "color": "primary"
+                }
+            ],
             [
                 {
                     "action": {
@@ -239,9 +248,19 @@ class WebServer:
             if text.lower() in ["начать", "start", "/start"]:
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="Выберите вариант:",
+                    message="Добро пожаловать! Выберите действие:",
                     peer_id=peer_id,
-                    keyboard=create_yes_no_keyboard()
+                    keyboard=create_main_keyboard()
+                )
+                return
+            
+            # Handle "Меню" button (no functionality yet)
+            if text.lower() == "меню":
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="Меню в разработке...",
+                    peer_id=peer_id,
+                    keyboard=create_main_keyboard()
                 )
                 return
             
@@ -271,7 +290,8 @@ class WebServer:
                 await self.vk_api.send_message(
                     user_id=user_id,
                     message="Спасибо за ваш ответ! Администратор получит уведомление.",
-                    peer_id=peer_id
+                    peer_id=peer_id,
+                    keyboard=create_main_keyboard()
                 )
                 return
             
@@ -283,8 +303,9 @@ class WebServer:
             # Default - show keyboard again
             await self.vk_api.send_message(
                 user_id=user_id,
-                message="Нажмите кнопку 'Начать' для начала работы.",
-                peer_id=peer_id
+                message="Нажмите кнопку для действия.",
+                peer_id=peer_id,
+                keyboard=create_main_keyboard()
             )
             
         except Exception as e:
