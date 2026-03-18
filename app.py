@@ -1,12 +1,18 @@
 import os
+import sys
 import json
 import logging
 import asyncio
+import signal
 import random
 from typing import Any, Dict, Optional
 
 import aiohttp
 from aiohttp import web
+
+# Force unbuffered output
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 # -----------------------------------------------------------------------------
 # Environment Variables
@@ -15,13 +21,24 @@ TOKEN = os.getenv("TOKEN", "")  # VK Access Token
 CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")  # VK Confirmation Token
 PORT = int(os.getenv("PORT", "8080"))
 
-# Setup logging
+# Setup logging with forced stdout
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler()]
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+    ]
 )
 logger = logging.getLogger("vk_bot")
+
+# Print immediately
+print("=" * 50, flush=True)
+print("VK BOT STARTING", flush=True)
+print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
+print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
+print(f"CONFIRMATION_TOKEN value: {CONFIRMATION_TOKEN}", flush=True)
+print(f"PORT: {PORT}", flush=True)
+print("=" * 50, flush=True)
 
 # -----------------------------------------------------------------------------
 # VK API Helper
@@ -139,6 +156,7 @@ class WebServer:
         self.app = web.Application()
         self.vk_api = VKAPI(TOKEN) if TOKEN else None
         self._setup_routes()
+        print("WebServer initialized", flush=True)
 
     def _setup_routes(self) -> None:
         """Setup routes for web server."""
@@ -148,10 +166,11 @@ class WebServer:
         # Health check
         self.app.router.add_get("/", self.health)
         self.app.router.add_get("/health", self.health)
+        print("Routes setup complete", flush=True)
 
     async def health(self, request: web.Request) -> web.Response:
         """Health check endpoint."""
-        logger.info("Health check requested")
+        print("Health check requested", flush=True)
         return web.json_response({
             "status": "ok",
             "token_configured": bool(TOKEN),
@@ -163,49 +182,44 @@ class WebServer:
         try:
             # Read request body
             body = await request.text()
-            logger.info(f"Received POST request: {body[:500]}")
+            print(f"POST received: {body[:500]}", flush=True)
             
             # Parse JSON
             try:
                 data = json.loads(body)
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON: {e}")
+                print(f"JSON parse error: {e}", flush=True)
                 return web.Response(text="invalid json", status=400)
             
             event_type = data.get("type", "")
             group_id = data.get("group_id", 0)
             
-            logger.info(f"Event type: {event_type}, group_id: {group_id}")
+            print(f"Event: {event_type}, group: {group_id}", flush=True)
             
             # Handle confirmation
             if event_type == "confirmation":
-                logger.info(f"Confirmation request received")
-                if CONFIRMATION_TOKEN:
-                    logger.info(f"Returning confirmation token")
-                    return web.Response(text=CONFIRMATION_TOKEN)
-                else:
-                    logger.error("CONFIRMATION_TOKEN not configured!")
-                    return web.Response(text="error", status=500)
+                print(f"CONFIRMATION REQUEST - returning: {CONFIRMATION_TOKEN}", flush=True)
+                return web.Response(text=CONFIRMATION_TOKEN)
             
             # Handle message_new
             if event_type == "message_new":
-                logger.info("Handling message_new")
+                print("Handling message_new", flush=True)
                 await self._handle_message_new(data)
                 return web.Response(text="ok")
             
-            # Unknown event type - still return ok
-            logger.info(f"Unknown event type: {event_type}, returning ok")
+            # Unknown event
+            print(f"Unknown event: {event_type}", flush=True)
             return web.Response(text="ok")
             
         except Exception as e:
-            logger.exception(f"Webhook error: {e}")
+            print(f"ERROR: {e}", flush=True)
             return web.Response(text="ok")
 
     async def _handle_message_new(self, data: Dict) -> None:
         """Handle message_new event."""
         try:
             if not self.vk_api:
-                logger.error("VK API not initialized (TOKEN missing)")
+                print("No VK API", flush=True)
                 return
             
             await self.vk_api.init()
@@ -217,7 +231,7 @@ class WebServer:
             peer_id = message.get("peer_id", user_id)
             text = message.get("text", "").strip()
             
-            logger.info(f"Message from user {user_id}: {text}")
+            print(f"User {user_id}: {text}", flush=True)
             
             # Handle "Start" button
             if text.lower() in ["начать", "start", "/start"]:
@@ -248,39 +262,20 @@ class WebServer:
             )
             
         except Exception as e:
-            logger.exception(f"Error handling message: {e}")
+            print(f"Message handling error: {e}", flush=True)
 
 
 # -----------------------------------------------------------------------------
 # Entrypoint
 # -----------------------------------------------------------------------------
-async def main(port: int = 8080) -> None:
+def main_sync():
+    """Synchronous entry point."""
+    print("Creating web server...", flush=True)
     server = WebServer()
     
-    runner = web.AppRunner(server.app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    
-    logger.info(f"VK Bot server started on 0.0.0.0:{port}")
-    logger.info(f"TOKEN configured: {bool(TOKEN)}")
-    logger.info(f"CONFIRMATION_TOKEN configured: {bool(CONFIRMATION_TOKEN)}")
-    if CONFIRMATION_TOKEN:
-        logger.info(f"CONFIRMATION_TOKEN value: {CONFIRMATION_TOKEN}")
-    
-    try:
-        await asyncio.Event().wait()
-    except KeyboardInterrupt:
-        logger.info("Shutting down...")
-    finally:
-        if server.vk_api:
-            await server.vk_api.close()
-        await runner.cleanup()
-        logger.info("Application shutdown complete")
+    print(f"Starting on port {PORT}...", flush=True)
+    web.run_app(server.app, host="0.0.0.0", port=PORT, print=lambda x: print(x, flush=True))
 
 
 if __name__ == "__main__":
-    logger.info("Starting VK Bot...")
-    logger.info(f"TOKEN: {'configured' if TOKEN else 'NOT SET'}")
-    logger.info(f"CONFIRMATION_TOKEN: {'configured' if CONFIRMATION_TOKEN else 'NOT SET'}")
-    asyncio.run(main(PORT))
+    main_sync()
