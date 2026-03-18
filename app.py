@@ -248,7 +248,7 @@ class WebServer:
             if text.lower() in ["начать", "start", "/start"]:
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="Добро пожаловать! Выберите действие:",
+                    message="Добро пожаловать!\n\nБот не реагирует на текстовые сообщения. Используйте кнопки клавиатуры.",
                     peer_id=peer_id,
                     keyboard=create_main_keyboard()
                 )
@@ -300,13 +300,9 @@ class WebServer:
                 print(f"User {user_id} pressed 'Нет' - no action", flush=True)
                 return
             
-            # Default - show keyboard again
-            await self.vk_api.send_message(
-                user_id=user_id,
-                message="Нажмите кнопку для действия.",
-                peer_id=peer_id,
-                keyboard=create_main_keyboard()
-            )
+            # Ignore all other text input
+            print(f"Ignoring text message from user {user_id}: {text}", flush=True)
+            # No response - just ignore
             
         except Exception as e:
             print(f"Message handling error: {e}", flush=True)
