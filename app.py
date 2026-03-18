@@ -171,9 +171,12 @@ class WebServer:
 
     def _setup_routes(self) -> None:
         """Setup routes for web server."""
+        # VK sends POST to root URL for confirmation
+        self.app.router.add_post("/", self.vk_webhook)
+        self.app.router.add_post("/webhook", self.vk_webhook)
+        # Health check
         self.app.router.add_get("/", self.health)
         self.app.router.add_get("/health", self.health)
-        self.app.router.add_post("/webhook", self.vk_webhook)
 
     async def health(self, request: web.Request) -> web.Response:
         """Health check endpoint."""
@@ -194,19 +197,30 @@ class WebServer:
         - message_event: Callback button pressed
         """
         try:
-            data = await request.json()
+            # Log raw request
+            logger.info(f"Received request: method={request.method}, path={request.path}")
+            
+            # Read request body
+            body = await request.text()
+            logger.info(f"Request body: {body}")
+            
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON: {e}")
+                return web.Response(text="invalid json", status=400)
+            
             event_type = data.get("type", "")
             group_id = data.get("group_id", 0)
             
             logger.info(f"VK webhook received: type={event_type}, group_id={group_id}")
-            logger.debug(f"Full event data: {json.dumps(data, ensure_ascii=False)}")
             
             # Handle confirmation
             if event_type == "confirmation":
                 if not CONFIRMATION_TOKEN:
                     logger.error("CONFIRMATION_TOKEN not configured")
                     return web.Response(text="error", status=500)
-                logger.info("Returning confirmation token")
+                logger.info(f"Returning confirmation token: {CONFIRMATION_TOKEN}")
                 return web.Response(text=CONFIRMATION_TOKEN)
             
             # Handle message_new
