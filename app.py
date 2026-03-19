@@ -125,6 +125,11 @@ class VKAPI:
             params["keyboard"] = json.dumps(keyboard, ensure_ascii=False)
         
         return await self.call("messages.send", params)
+    
+    async def get_user_info(self, user_id: int) -> Dict[str, Any]:
+        """Get user info by ID."""
+        params = {"user_ids": user_id}
+        return await self.call("users.get", params)
 
 
 # -----------------------------------------------------------------------------
@@ -188,12 +193,18 @@ def create_answer_keyboard(shuffled_answers: List[Dict]) -> Dict:
     }
 
 def create_retry_keyboard() -> Dict:
-    """Keyboard with retry button."""
+    """Keyboard with Menu and Retry buttons for failed test."""
     restart_text = TEXTS_DATA.get("restart_button", "Пройти заново")
     return {
         "one_time": False,
         "inline": False,
         "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "primary"
+                }
+            ],
             [
                 {
                     "action": {"type": "text", "label": restart_text},
@@ -480,8 +491,35 @@ class WebServer:
         score = session["score"]
         total = len(TESTS_DATA.get("variants", [{}])[session["variant"]].get("questions", []))
         passing_score = TESTS_DATA.get("test_info", {}).get("passing_score", 18)
+        passed = score >= passing_score
         
-        if score >= passing_score:
+        # Get user name for admin notification
+        user_name = f"ID{user_id}"
+        try:
+            user_info = await self.vk_api.get_user_info(user_id)
+            if "response" in user_info and user_info["response"]:
+                first_name = user_info["response"][0].get("first_name", "")
+                last_name = user_info["response"][0].get("last_name", "")
+                user_name = f"{first_name} {last_name} (ID: {user_id})"
+        except Exception as e:
+            print(f"Error getting user info: {e}", flush=True)
+        
+        # Send notification to admin chat
+        if ADMIN_CHAT:
+            try:
+                status = "СДАЛ" if passed else "НЕ СДАЛ"
+                admin_message = f"Пользователь {user_name} {status} тест!\nРезультат: {score}/{total}"
+                await self.vk_api.send_message(
+                    user_id=0,
+                    message=admin_message,
+                    peer_id=int(ADMIN_CHAT)
+                )
+                print(f"Admin notification sent to {ADMIN_CHAT}", flush=True)
+            except Exception as e:
+                print(f"Failed to send admin notification: {e}", flush=True)
+        
+        # Send result to user
+        if passed:
             passed_text = TEXTS_DATA.get("test_passed", "🎉 Поздравляем! Вы сдали тест!")
             message = f"{passed_text}\n\nВаш результат: {score}/{total}"
             await self.vk_api.send_message(
