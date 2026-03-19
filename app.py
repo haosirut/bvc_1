@@ -154,12 +154,16 @@ def create_main_menu_keyboard() -> Dict:
     }
 
 def create_menu_keyboard() -> Dict:
-    """Menu with Testing button."""
+    """Menu with Testing button and Menu button always visible."""
     return {
         "one_time": False,
         "inline": False,
         "buttons": [
             [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "primary"
+                },
                 {
                     "action": {"type": "text", "label": "Тестирование"},
                     "color": "positive"
@@ -169,24 +173,26 @@ def create_menu_keyboard() -> Dict:
     }
 
 def create_answer_keyboard(shuffled_answers: List[Dict]) -> Dict:
-    """Keyboard with answer buttons 1, 2, 3."""
+    """Keyboard with Menu button and answer buttons 1, 2, 3."""
     return {
         "one_time": False,
         "inline": False,
         "buttons": [
             [
                 {
-                    "action": {"type": "text", "label": "1"},
+                    "action": {"type": "text", "label": "Меню"},
                     "color": "primary"
                 }
             ],
             [
                 {
+                    "action": {"type": "text", "label": "1"},
+                    "color": "primary"
+                },
+                {
                     "action": {"type": "text", "label": "2"},
                     "color": "primary"
-                }
-            ],
-            [
+                },
                 {
                     "action": {"type": "text", "label": "3"},
                     "color": "primary"
@@ -346,8 +352,13 @@ class WebServer:
                 )
                 return
             
-            # Handle "Меню" button
+            # Handle "Меню" button - always available, cancels any ongoing test
             if text.lower() == "меню":
+                # Clear session if user is in the middle of a test
+                if user_id in USER_SESSIONS:
+                    del USER_SESSIONS[user_id]
+                    print(f"Session cleared for user {user_id} - returned to menu", flush=True)
+                
                 await self.vk_api.send_message(
                     user_id=user_id,
                     message="Выберите действие:",
