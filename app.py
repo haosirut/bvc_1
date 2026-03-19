@@ -20,6 +20,7 @@ sys.stderr.reconfigure(line_buffering=True)
 TOKEN = os.getenv("TOKEN", "")  # VK Access Token
 CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")  # VK Confirmation Token
 ADMIN_IDS_STR = os.getenv("ADMIN_ID", "535097409")  # Admin IDs separated by comma
+ADMIN_CHAT = os.getenv("ADMIN_CHAT", "")  # Peer ID of admin chat (e.g., 2000000002)
 PORT = int(os.getenv("PORT", "8080"))
 
 # Parse admin IDs from comma-separated string
@@ -41,6 +42,7 @@ print("VK BOT STARTING", flush=True)
 print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
 print(f"ADMIN_IDS: {ADMIN_IDS}", flush=True)
+print(f"ADMIN_CHAT: {ADMIN_CHAT}", flush=True)
 print(f"PORT: {PORT}", flush=True)
 print("=" * 50, flush=True)
 
@@ -185,7 +187,8 @@ class WebServer:
             "status": "ok",
             "token_configured": bool(TOKEN),
             "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
-            "admin_ids": ADMIN_IDS
+            "admin_ids": ADMIN_IDS,
+            "admin_chat": ADMIN_CHAT
         })
 
     async def vk_webhook(self, request: web.Request) -> web.Response:
@@ -274,17 +277,21 @@ class WebServer:
                     last_name = user_info["response"][0].get("last_name", "")
                     user_name = f"{first_name} {last_name}"
                 
-                # Send notification to all admins
-                if ADMIN_IDS:
-                    admin_message = f"Пользователь {user_name} (ID: {user_id}) нажал 'Да'!"
-                    for admin_id in ADMIN_IDS:
+                admin_message = f"Пользователь {user_name} (ID: {user_id}) нажал 'Да'!"
+                
+                # Send notification to admin chat (if configured)
+                if ADMIN_CHAT:
+                    try:
                         await self.vk_api.send_message(
-                            user_id=admin_id,
-                            message=admin_message
+                            user_id=0,
+                            message=admin_message,
+                            peer_id=int(ADMIN_CHAT)
                         )
-                        print(f"Notification sent to admin {admin_id}", flush=True)
+                        print(f"Notification sent to admin chat {ADMIN_CHAT}", flush=True)
+                    except Exception as e:
+                        print(f"Failed to send to admin chat: {e}", flush=True)
                 else:
-                    print("ADMIN_IDS not configured, cannot send notification", flush=True)
+                    print("ADMIN_CHAT not configured", flush=True)
                 
                 # Confirm to user
                 await self.vk_api.send_message(
