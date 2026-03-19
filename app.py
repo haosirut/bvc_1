@@ -19,11 +19,11 @@ sys.stderr.reconfigure(line_buffering=True)
 # -----------------------------------------------------------------------------
 TOKEN = os.getenv("TOKEN", "")
 CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")
-ADMIN_IDS_STR = os.getenv("ADMIN_CHAT", "")  # Admin IDs separated by comma
+CHECK_TEST_STR = os.getenv("CHECK_TEST", "")  # Admin IDs separated by comma
 PORT = int(os.getenv("PORT", "8080"))
 
 # Parse admin IDs from comma-separated string
-ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(",") if id.strip()]
+CHECK_TEST_IDS = [int(id.strip()) for id in CHECK_TEST_STR.split(",") if id.strip()]
 
 # Setup logging
 logging.basicConfig(
@@ -38,7 +38,7 @@ print("=" * 50, flush=True)
 print("VK BOT STARTING", flush=True)
 print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
-print(f"ADMIN_IDS: {ADMIN_IDS}", flush=True)
+print(f"CHECK_TEST_IDS: {CHECK_TEST_IDS}", flush=True)
 print(f"PORT: {PORT}", flush=True)
 print("=" * 50, flush=True)
 
@@ -284,7 +284,7 @@ class WebServer:
             "status": "ok",
             "token_configured": bool(TOKEN),
             "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
-            "admin_ids": ADMIN_IDS,
+            "check_test_ids": CHECK_TEST_IDS,
             "tests_loaded": bool(TESTS_DATA),
             "texts_loaded": bool(TEXTS_DATA)
         })
@@ -519,10 +519,12 @@ class WebServer:
             print(f"Error getting user info: {e}", flush=True)
         
         # Send notification to all admins
-        if ADMIN_IDS:
+        if CHECK_TEST_IDS:
             status = "СДАЛ" if passed else "НЕ СДАЛ"
-            admin_message = f"Пользователь {user_name} {status} тест!\nРезультат: {score}/{total}"
-            for admin_id in ADMIN_IDS:
+            # Create clickable link to user profile
+            user_link = f"[id{user_id}|{user_name}]"
+            admin_message = f"Пользователь {user_link} {status} тест!\nРезультат: {score}/{total}"
+            for admin_id in CHECK_TEST_IDS:
                 try:
                     await self.vk_api.send_message(
                         user_id=admin_id,
