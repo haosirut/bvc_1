@@ -19,8 +19,11 @@ sys.stderr.reconfigure(line_buffering=True)
 # -----------------------------------------------------------------------------
 TOKEN = os.getenv("TOKEN", "")
 CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")
-ADMIN_CHAT = os.getenv("ADMIN_CHAT", "")
+ADMIN_IDS_STR = os.getenv("ADMIN_CHAT", "")  # Admin IDs separated by comma
 PORT = int(os.getenv("PORT", "8080"))
+
+# Parse admin IDs from comma-separated string
+ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(",") if id.strip()]
 
 # Setup logging
 logging.basicConfig(
@@ -35,7 +38,7 @@ print("=" * 50, flush=True)
 print("VK BOT STARTING", flush=True)
 print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
-print(f"ADMIN_CHAT: {ADMIN_CHAT}", flush=True)
+print(f"ADMIN_IDS: {ADMIN_IDS}", flush=True)
 print(f"PORT: {PORT}", flush=True)
 print("=" * 50, flush=True)
 
@@ -275,7 +278,7 @@ class WebServer:
             "status": "ok",
             "token_configured": bool(TOKEN),
             "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
-            "admin_chat": ADMIN_CHAT,
+            "admin_ids": ADMIN_IDS,
             "tests_loaded": bool(TESTS_DATA),
             "texts_loaded": bool(TEXTS_DATA)
         })
@@ -504,19 +507,19 @@ class WebServer:
         except Exception as e:
             print(f"Error getting user info: {e}", flush=True)
         
-        # Send notification to admin chat
-        if ADMIN_CHAT:
-            try:
-                status = "СДАЛ" if passed else "НЕ СДАЛ"
-                admin_message = f"Пользователь {user_name} {status} тест!\nРезультат: {score}/{total}"
-                await self.vk_api.send_message(
-                    user_id=0,
-                    message=admin_message,
-                    peer_id=int(ADMIN_CHAT)
-                )
-                print(f"Admin notification sent to {ADMIN_CHAT}", flush=True)
-            except Exception as e:
-                print(f"Failed to send admin notification: {e}", flush=True)
+        # Send notification to all admins
+        if ADMIN_IDS:
+            status = "СДАЛ" if passed else "НЕ СДАЛ"
+            admin_message = f"Пользователь {user_name} {status} тест!\nРезультат: {score}/{total}"
+            for admin_id in ADMIN_IDS:
+                try:
+                    await self.vk_api.send_message(
+                        user_id=admin_id,
+                        message=admin_message
+                    )
+                    print(f"Admin notification sent to {admin_id}", flush=True)
+                except Exception as e:
+                    print(f"Failed to send admin notification to {admin_id}: {e}", flush=True)
         
         # Send result to user
         if passed:
