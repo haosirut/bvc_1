@@ -1,0 +1,564 @@
+{
+  "test_info": {
+    "title": "Тестирование 1 курс",
+    "passing_score": 18,
+    "total_questions": 20
+  },
+  "variants": [
+    {
+      "variant_number": 1,
+      "questions": [
+        {
+          "question_number": 1,
+          "question": "Сколько лет клубу?",
+          "answers": [
+            {"id": 2, "text": "12", "is_correct": true},
+            {"id": 1, "text": "13", "is_correct": false},
+            {"id": 3, "text": "10", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 2,
+          "question": "Кем является клуб для учеников?",
+          "answers": [
+            {"id": 2, "text": "Проводниками в мире пляжного волейбола", "is_correct": true},
+            {"id": 1, "text": "Академией специального образования", "is_correct": false},
+            {"id": 3, "text": "Собранием тренеров и наставников", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 3,
+          "question": "Что означает буква \"Е\" в нашем девизе \"Я молодец\"?",
+          "answers": [
+            {"id": 1, "text": "Единое понимание теории и тактики", "is_correct": true},
+            {"id": 2, "text": "Единственно верное решение", "is_correct": false},
+            {"id": 3, "text": "Единение с напарником", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 4,
+          "question": "Что означает буква \"М\" в нашем девизе \"Я молодец\"?",
+          "answers": [
+            {"id": 2, "text": "Мотивация", "is_correct": true},
+            {"id": 1, "text": "Мыслительный процесс", "is_correct": false},
+            {"id": 3, "text": "Материальная база", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 5,
+          "question": "Можно ли ходить под сеткой в пляжном волейболе?",
+          "answers": [
+            {"id": 2, "text": "Да, но не мешая сопернику", "is_correct": true},
+            {"id": 1, "text": "Нет", "is_correct": false},
+            {"id": 3, "text": "Да, всегда", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 6,
+          "question": "Сколько игроков в одной команде в пляжном волейболе?",
+          "answers": [
+            {"id": 1, "text": "2", "is_correct": true},
+            {"id": 2, "text": "6", "is_correct": false},
+            {"id": 3, "text": "4", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 7,
+          "question": "По какому принципу ставим цели?",
+          "answers": [
+            {"id": 2, "text": "SMART", "is_correct": true},
+            {"id": 1, "text": "BVC GOAL", "is_correct": false},
+            {"id": 3, "text": "Я МОЛОДЕЦ", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 8,
+          "question": "В каком порядке движется рука по принципу Хлыста?",
+          "answers": [
+            {"id": 1, "text": "Локоть-кисть", "is_correct": true},
+            {"id": 2, "text": "Кисть и локоть одновременно", "is_correct": false},
+            {"id": 3, "text": "Кисть-локоть", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 9,
+          "question": "Какая цель на первом курсе на подаче?",
+          "answers": [
+            {"id": 1, "text": "Подать из центра 5 подач", "is_correct": true},
+            {"id": 2, "text": "Просто подать 5 подач", "is_correct": false},
+            {"id": 3, "text": "Подать из-за лицевой 5 подач", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 10,
+          "question": "Где находятся руки перед приемом?",
+          "answers": [
+            {"id": 2, "text": "Перед собой", "is_correct": true},
+            {"id": 1, "text": "На бедрах", "is_correct": false},
+            {"id": 3, "text": "Снизу, на уровне колен", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 11,
+          "question": "Какая цель приема в пляжном волейболе?",
+          "answers": [
+            {"id": 1, "text": "Оба ответа верны", "is_correct": true},
+            {"id": 2, "text": "Дать время пасующему", "is_correct": false},
+            {"id": 3, "text": "Снизить скорость", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 12,
+          "question": "Как работают ноги в конце передачи?",
+          "answers": [
+            {"id": 2, "text": "Поднимаемся на носки", "is_correct": true},
+            {"id": 1, "text": "Ноги не работают", "is_correct": false},
+            {"id": 3, "text": "Стоят на песке", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 13,
+          "question": "Почему мы делаем передачу снизу, а не сверху?",
+          "answers": [
+            {"id": 2, "text": "Невозможно ошибиться", "is_correct": true},
+            {"id": 1, "text": "Проще набрать очки", "is_correct": false},
+            {"id": 3, "text": "Оба ответа верны", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 14,
+          "question": "Как эффективно атаковать?",
+          "answers": [
+            {"id": 2, "text": "Сверху и снизу", "is_correct": true},
+            {"id": 1, "text": "Только снизу", "is_correct": false},
+            {"id": 3, "text": "Только сверху", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 15,
+          "question": "С какого касания можно совершить атаку?",
+          "answers": [
+            {"id": 1, "text": "С любого", "is_correct": true},
+            {"id": 2, "text": "Со второго или третьего", "is_correct": false},
+            {"id": 3, "text": "С третьего", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 16,
+          "question": "Что происходит с кистью при нападающем ударе?",
+          "answers": [
+            {"id": 1, "text": "Закрывается", "is_correct": true},
+            {"id": 2, "text": "Не напрягается", "is_correct": false},
+            {"id": 3, "text": "Остается открытой", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 17,
+          "question": "Где находится вторая зона в корте?",
+          "answers": [
+            {"id": 1, "text": "Справа", "is_correct": true},
+            {"id": 2, "text": "Спереди", "is_correct": false},
+            {"id": 3, "text": "Слева", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 18,
+          "question": "Куда принимаем подачу?",
+          "answers": [
+            {"id": 2, "text": "В центр площадки", "is_correct": true},
+            {"id": 1, "text": "Куда угодно", "is_correct": false},
+            {"id": 3, "text": "Перед собой", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 19,
+          "question": "В каком состоянии мы стараемся тренироваться и играть?",
+          "answers": [
+            {"id": 1, "text": "В состоянии \"Плюса\"", "is_correct": true},
+            {"id": 2, "text": "Состояние не важно", "is_correct": false},
+            {"id": 3, "text": "В состоянии концентрации", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 20,
+          "question": "Чему мы учимся на тренировках?",
+          "answers": [
+            {"id": 1, "text": "Принимать решения", "is_correct": true},
+            {"id": 2, "text": "Забивать мячи", "is_correct": false},
+            {"id": 3, "text": "Пляжному волейболу", "is_correct": false}
+          ]
+        }
+      ]
+    },
+    {
+      "variant_number": 2,
+      "questions": [
+        {
+          "question_number": 1,
+          "question": "Какова цель клуба BVC?",
+          "answers": [
+            {"id": 1, "text": "Создать систему многогранного развития личности", "is_correct": true},
+            {"id": 2, "text": "Вырастатить олимпийского чемпиона", "is_correct": false},
+            {"id": 3, "text": "Научить играть всех в мире в волейбол", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 2,
+          "question": "Какова миссия клуба BVC?",
+          "answers": [
+            {"id": 1, "text": "Формирование здоровой среды", "is_correct": true},
+            {"id": 2, "text": "Проведение тренировок и лагерей", "is_correct": false},
+            {"id": 3, "text": "Обучение пляжному волейболу", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 3,
+          "question": "Что означают буквы \"О\" в нашем девизе \"Я молодец\"?",
+          "answers": [
+            {"id": 1, "text": "Оздоровление и общение", "is_correct": true},
+            {"id": 2, "text": "Оптимизм и округление", "is_correct": false},
+            {"id": 3, "text": "Общефизическая подготовка и обязательность", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 4,
+          "question": "Что означает буква \"Л\" в нашем девизе \"Я молодец\"?",
+          "answers": [
+            {"id": 1, "text": "Делаем с любовью", "is_correct": true},
+            {"id": 2, "text": "Лекции", "is_correct": false},
+            {"id": 3, "text": "Не ленимся", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 5,
+          "question": "Размер площадки в пляжном волейболе?",
+          "answers": [
+            {"id": 1, "text": "8х16 метров", "is_correct": true},
+            {"id": 2, "text": "10х20 метров", "is_correct": false},
+            {"id": 3, "text": "9х18 метров", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 6,
+          "question": "Как можно заработать очко в пляжном волейболе?",
+          "answers": [
+            {"id": 1, "text": "Добить мяч до песка на стороне соперника", "is_correct": true},
+            {"id": 2, "text": "Оба ответа верны", "is_correct": false},
+            {"id": 3, "text": "Заставить соперника ошибиться", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 7,
+          "question": "Сколько дней есть на сдачу итогового тестирования?",
+          "answers": [
+            {"id": 1, "text": "20 дней", "is_correct": true},
+            {"id": 2, "text": "30 дней", "is_correct": false},
+            {"id": 3, "text": "10 дней", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 8,
+          "question": "Чем подаем подачу?",
+          "answers": [
+            {"id": 1, "text": "Основанием ладони", "is_correct": true},
+            {"id": 2, "text": "Центром ладони", "is_correct": false},
+            {"id": 3, "text": "Пальцами", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 9,
+          "question": "С чего начинается подача?",
+          "answers": [
+            {"id": 1, "text": "С ритуала", "is_correct": true},
+            {"id": 2, "text": "С удара по мячу", "is_correct": false},
+            {"id": 3, "text": "С наброса", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 10,
+          "question": "Какой частью тела принимаем подачу?",
+          "answers": [
+            {"id": 1, "text": "Предплечьем", "is_correct": true},
+            {"id": 2, "text": "Не важно", "is_correct": false},
+            {"id": 3, "text": "Запястьем", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 11,
+          "question": "Куда принимаем подачу в корте?",
+          "answers": [
+            {"id": 1, "text": "Выбиваем в центр", "is_correct": true},
+            {"id": 2, "text": "В напарника", "is_correct": false},
+            {"id": 3, "text": "Перед собой", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 12,
+          "question": "Как стоят ноги на передаче?",
+          "answers": [
+            {"id": 1, "text": "Ближняя к сетке. Не параллельны", "is_correct": true},
+            {"id": 2, "text": "Ноги параллельны", "is_correct": false},
+            {"id": 3, "text": "Любая нога спереди", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 13,
+          "question": "Куда мы совершаем передачу в пляжном волейболе?",
+          "answers": [
+            {"id": 1, "text": "Рядом", "is_correct": true},
+            {"id": 2, "text": "К сетке", "is_correct": false},
+            {"id": 3, "text": "На антенну", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 14,
+          "question": "В какой фазе дыхания мы пасуем?",
+          "answers": [
+            {"id": 1, "text": "На выдохе", "is_correct": true},
+            {"id": 2, "text": "Не важно", "is_correct": false},
+            {"id": 3, "text": "На вдохе", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 15,
+          "question": "Что мы делаем сразу после приема подачи?",
+          "answers": [
+            {"id": 1, "text": "Заказываем \"Рядом\"", "is_correct": true},
+            {"id": 2, "text": "Ждем передачи", "is_correct": false},
+            {"id": 3, "text": "Бежим к сетке", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 16,
+          "question": "Чем контролируем направление атаки?",
+          "answers": [
+            {"id": 1, "text": "Указательным пальцем", "is_correct": true},
+            {"id": 2, "text": "Прыжком", "is_correct": false},
+            {"id": 3, "text": "Выдохом", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 17,
+          "question": "Где ждем приема, когда поняли, что мяч при подаче летит не в нас?",
+          "answers": [
+            {"id": 1, "text": "В зоне ожидания", "is_correct": true},
+            {"id": 2, "text": "У сетки", "is_correct": false},
+            {"id": 3, "text": "В зоне приема", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 18,
+          "question": "Если нам забили мяч в красную зону...?",
+          "answers": [
+            {"id": 1, "text": "Нападающий молодец", "is_correct": true},
+            {"id": 2, "text": "Это спорный мяч", "is_correct": false},
+            {"id": 3, "text": "Я плохой игрок", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 19,
+          "question": "Как мы относимся к нашему внутреннему волейболисту?",
+          "answers": [
+            {"id": 1, "text": "Как к ребенку", "is_correct": true},
+            {"id": 2, "text": "Как к равному", "is_correct": false},
+            {"id": 3, "text": "Как ко взрослому", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 20,
+          "question": "Как даем себе и партнеру обратную связь?",
+          "answers": [
+            {"id": 1, "text": "По принципу бутерброда", "is_correct": true},
+            {"id": 2, "text": "Говорим только плохое", "is_correct": false},
+            {"id": 3, "text": "Говорим только хорошее", "is_correct": false}
+          ]
+        }
+      ]
+    },
+    {
+      "variant_number": 3,
+      "questions": [
+        {
+          "question_number": 1,
+          "question": "Какой девиз клуба BVC?",
+          "answers": [
+            {"id": 1, "text": "Мы влюбляем в пляжный волейбол", "is_correct": true},
+            {"id": 2, "text": "Мы выращиваем чемпионов", "is_correct": false},
+            {"id": 3, "text": "Мы обучаем всех волейболу", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 2,
+          "question": "Как называется система обучения клуба BVC?",
+          "answers": [
+            {"id": 1, "text": "\"Я молодец\"", "is_correct": true},
+            {"id": 2, "text": "\"Я могу лучше\"", "is_correct": false},
+            {"id": 3, "text": "\"Я чемпион\"", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 3,
+          "question": "Что означает буква \"Д\" в нашем девизе \"Я молодец\"?",
+          "answers": [
+            {"id": 1, "text": "Делать", "is_correct": true},
+            {"id": 2, "text": "Делегирование", "is_correct": false},
+            {"id": 3, "text": "Думать", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 4,
+          "question": "Что означает буква \"Ц\" в нашем девизе \"Я молодец\"?",
+          "answers": [
+            {"id": 1, "text": "Цель", "is_correct": true},
+            {"id": 2, "text": "Царь", "is_correct": false},
+            {"id": 3, "text": "Цемент", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 5,
+          "question": "Сколько касаний может быть у команды в пляжном волейболе?",
+          "answers": [
+            {"id": 1, "text": "Одно, два или три", "is_correct": true},
+            {"id": 2, "text": "Только два или три", "is_correct": false},
+            {"id": 3, "text": "Три, четыре или пять", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 6,
+          "question": "Можно ли касаться сетки в пляжном волейболе?",
+          "answers": [
+            {"id": 1, "text": "Нет. Только волосы и некоторой экипировкой", "is_correct": true},
+            {"id": 2, "text": "Никогда и ничем нельзя.", "is_correct": false},
+            {"id": 3, "text": "Можно.", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 7,
+          "question": "По какому принципу ставим цели?",
+          "answers": [
+            {"id": 1, "text": "SMART", "is_correct": true},
+            {"id": 2, "text": "Я МОЛОДЕЦ", "is_correct": false},
+            {"id": 3, "text": "BVC GOAL", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 8,
+          "question": "Что такое колчан со стрелами в контексте подачи?",
+          "answers": [
+            {"id": 1, "text": "Стартовая позиция", "is_correct": true},
+            {"id": 2, "text": "Тип подачи", "is_correct": false},
+            {"id": 3, "text": "Финальная позиция", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 9,
+          "question": "Как набрасываем мяч на подачу?",
+          "answers": [
+            {"id": 1, "text": "На полтора метра", "is_correct": true},
+            {"id": 2, "text": "Подаем с руки", "is_correct": false},
+            {"id": 3, "text": "Высоко, 3 метра", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 10,
+          "question": "Что происходит с рукой после подачи?",
+          "answers": [
+            {"id": 1, "text": "Оставляем сверху", "is_correct": true},
+            {"id": 2, "text": "Сжимаем в кулак", "is_correct": false},
+            {"id": 3, "text": "Бросаем вниз", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 11,
+          "question": "Где стоим при приеме подачи?",
+          "answers": [
+            {"id": 1, "text": "В середине заднего квадрата", "is_correct": true},
+            {"id": 2, "text": "У лицевой линии", "is_correct": false},
+            {"id": 3, "text": "В центре корта", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 12,
+          "question": "Что такое зеленая зона в приеме?",
+          "answers": [
+            {"id": 1, "text": "Там, где могу принять стоя.", "is_correct": true},
+            {"id": 2, "text": "Где принимаю и падаю.", "is_correct": false},
+            {"id": 3, "text": "Там, где не могу принять", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 13,
+          "question": "Если после приема мяч оказался отведенным от сетки (он в центре корта), куда мы смотрим на передаче?",
+          "answers": [
+            {"id": 1, "text": "30 градусов - к сетке", "is_correct": true},
+            {"id": 2, "text": "Перпендикулярно сетки", "is_correct": false},
+            {"id": 3, "text": "Параллельно сетке", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 14,
+          "question": "Что за принцип \"рыба-удильщик\"?",
+          "answers": [
+            {"id": 1, "text": "Удлиняем касание", "is_correct": true},
+            {"id": 2, "text": "Пасуем по заказу", "is_correct": false},
+            {"id": 3, "text": "Пасуем на выдохе", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 15,
+          "question": "Что мы делаем после заказа передачи?",
+          "answers": [
+            {"id": 1, "text": "Бежим рядом к пасующему", "is_correct": true},
+            {"id": 2, "text": "Стоим на месте", "is_correct": false},
+            {"id": 3, "text": "Бежим к сетке", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 16,
+          "question": "Что такое \"Яблочки\" в контексте пляжного волейбола?",
+          "answers": [
+            {"id": 1, "text": "Простые и сложные мячи", "is_correct": true},
+            {"id": 2, "text": "Типы нападающего удара", "is_correct": false},
+            {"id": 3, "text": "Типы подачи и приема", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 17,
+          "question": "Если мы падаем при приеме и защите, то...?",
+          "answers": [
+            {"id": 1, "text": "Перебиваем мяч через сетку", "is_correct": true},
+            {"id": 2, "text": "Лежим до конца розыгрыша", "is_correct": false},
+            {"id": 3, "text": "Стремимся разыграть на 3 касания", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 18,
+          "question": "Где защищаемся и принимаем подачу?",
+          "answers": [
+            {"id": 1, "text": "В середине заднего квадрата", "is_correct": true},
+            {"id": 2, "text": "В центре корта", "is_correct": false},
+            {"id": 3, "text": "В середине ближнего квадрата", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 19,
+          "question": "Когда мы делаем что-то новое, и у нас не всегда получается, мы должны..",
+          "answers": [
+            {"id": 1, "text": "Похвалить себя", "is_correct": true},
+            {"id": 2, "text": "Бросить всё", "is_correct": false},
+            {"id": 3, "text": "Поругать себя", "is_correct": false}
+          ]
+        },
+        {
+          "question_number": 20,
+          "question": "За что мы бьемся на тренировке?",
+          "answers": [
+            {"id": 1, "text": "За правильное состояние", "is_correct": true},
+            {"id": 2, "text": "За победу в игре", "is_correct": false},
+            {"id": 3, "text": "За каждое очко", "is_correct": false}
+          ]
+        }
+      ]
+    }
+  ]
+}
