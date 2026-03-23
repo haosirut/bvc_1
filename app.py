@@ -4,12 +4,16 @@ import json
 import logging
 import asyncio
 import random
+import io
 from typing import Any, Dict, Optional, List
 from copy import deepcopy
+from datetime import datetime
 
 import aiohttp
 from aiohttp import web
 import asyncpg
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
 # Force unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
@@ -20,7 +24,8 @@ sys.stderr.reconfigure(line_buffering=True)
 # -----------------------------------------------------------------------------
 TOKEN = os.getenv("TOKEN", "")
 CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")
-CHECK_TEST_STR = os.getenv("CHECK_TEST", "")  # Admin IDs separated by comma
+CHECK_TEST_STR = os.getenv("CHECK_TEST", "")  # Admin IDs for test notifications
+USER_ADMIN = os.getenv("USER_ADMIN", "")  # Super admin ID for database export
 PORT = int(os.getenv("PORT", "8080"))
 
 # Database configuration
@@ -30,6 +35,9 @@ DB_PASSWORD = os.getenv("BD_USER_PASSWORD", "")
 
 # Parse admin IDs from comma-separated string
 CHECK_TEST_IDS = [int(id.strip()) for id in CHECK_TEST_STR.split(",") if id.strip()]
+
+# Parse super admin ID
+USER_ADMIN_ID = int(USER_ADMIN) if USER_ADMIN else 0
 
 # Setup logging
 logging.basicConfig(
@@ -45,6 +53,7 @@ print("VK BOT STARTING", flush=True)
 print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
 print(f"CHECK_TEST_IDS: {CHECK_TEST_IDS}", flush=True)
+print(f"USER_ADMIN_ID: {USER_ADMIN_ID}", flush=True)
 print(f"DATABASE_URL: {'SET' if DATABASE_URL else 'NOT SET'}", flush=True)
 print(f"DB_USER: {DB_USER}", flush=True)
 print(f"PORT: {PORT}", flush=True)
@@ -149,6 +158,19 @@ class Database:
             print(f"Error getting user {user_id}: {e}", flush=True)
             return None
     
+    async def get_all_users(self) -> List[Dict]:
+        """Get all users from database."""
+        if not self.pool:
+            return []
+        
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch("SELECT * FROM users ORDER BY created_at DESC")
+                return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"Error getting all users: {e}", flush=True)
+            return []
+    
     async def create_user(self, user_id: int, user_name: str) -> bool:
         """Create new user."""
         if not self.pool:
@@ -234,7 +256,8 @@ class VKAPI:
         user_id: int, 
         message: str, 
         keyboard: Optional[Dict] = None,
-        peer_id: Optional[int] = None
+        peer_id: Optional[int] = None,
+        attachment: Optional[str] = None
     ) -> Dict[str, Any]:
         params = {
             "message": message,
@@ -249,12 +272,88 @@ class VKAPI:
         if keyboard:
             params["keyboard"] = json.dumps(keyboard, ensure_ascii=False)
         
+        if attachment:
+            params["attachment"] = attachment
+        
         return await self.call("messages.send", params)
     
     async def get_user_info(self, user_id: int) -> Dict[str, Any]:
         """Get user info by ID."""
         params = {"user_ids": user_id}
         return await self.call("users.get", params)
+    
+    async def get_upload_server(self, peer_id: int) -> Optional[str]:
+        """Get upload server URL for documents."""
+        result = await self.call("docs.getMessagesUploadServer", {"peer_id": peer_id, "type": "doc"})
+        if "response" in result and "upload_url" in result["response"]:
+            return result["response"]["upload_url"]
+        print(f"Error getting upload server: {result}", flush=True)
+        return None
+    
+    async def upload_document(self, upload_url: str, file_data: bytes, filename: str) -> Optional[Dict]:
+        """Upload document to VK."""
+        if not self.session:
+            await self.init()
+        
+        try:
+            form = aiohttp.FormData()
+            form.add_field('file', file_data, filename=filename, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            
+            async with self.session.post(upload_url, data=form) as resp:
+                result = await resp.json()
+                return result
+        except Exception as e:
+            print(f"Error uploading document: {e}", flush=True)
+            return None
+    
+    async def save_document(self, file: str, title: str) -> Optional[Dict]:
+        """Save uploaded document."""
+        result = await self.call("docs.save", {"file": file, "title": title})
+        return result
+    
+    async def send_document(self, peer_id: int, file_data: bytes, filename: str, message: str = "") -> bool:
+        """Upload and send document to user."""
+        try:
+            # Get upload server
+            upload_url = await self.get_upload_server(peer_id)
+            if not upload_url:
+                return False
+            
+            # Upload file
+            upload_result = await self.upload_document(upload_url, file_data, filename)
+            if not upload_result or "file" not in upload_result:
+                print(f"Upload failed: {upload_result}", flush=True)
+                return False
+            
+            # Save document
+            save_result = await self.save_document(upload_result["file"], filename)
+            if not save_result or "response" not in save_result:
+                print(f"Save failed: {save_result}", flush=True)
+                return False
+            
+            # Get document attachment string
+            doc = save_result["response"].get("doc", save_result["response"].get("docs", [{}])[0] if "docs" in save_result["response"] else {})
+            if not doc:
+                print(f"No doc in response: {save_result}", flush=True)
+                return False
+            
+            owner_id = doc.get("owner_id", doc.get("doc", {}).get("owner_id", ""))
+            doc_id = doc.get("id", doc.get("doc", {}).get("id", ""))
+            attachment = f"doc{owner_id}_{doc_id}"
+            
+            # Send message with attachment
+            await self.send_message(
+                user_id=0,
+                message=message,
+                peer_id=peer_id,
+                attachment=attachment
+            )
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error sending document: {e}", flush=True)
+            return False
 
 
 # -----------------------------------------------------------------------------
@@ -275,27 +374,66 @@ def create_main_menu_keyboard() -> Dict:
         ]
     }
 
-def create_menu_keyboard_with_form() -> Dict:
+def create_menu_keyboard_with_form(is_admin: bool = False) -> Dict:
     """Menu with Анкета button (for users who haven't completed form)."""
+    buttons = [
+        [
+            {
+                "action": {"type": "text", "label": "Меню"},
+                "color": "primary"
+            },
+            {
+                "action": {"type": "text", "label": "Анкета"},
+                "color": "positive"
+            }
+        ]
+    ]
+    
+    if is_admin:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "АДМИН"},
+                "color": "negative"
+            }
+        ])
+    
     return {
         "one_time": False,
         "inline": False,
-        "buttons": [
-            [
-                {
-                    "action": {"type": "text", "label": "Меню"},
-                    "color": "primary"
-                },
-                {
-                    "action": {"type": "text", "label": "Анкета"},
-                    "color": "positive"
-                }
-            ]
-        ]
+        "buttons": buttons
     }
 
-def create_menu_keyboard_with_test() -> Dict:
+def create_menu_keyboard_with_test(is_admin: bool = False) -> Dict:
     """Menu with Testing button (for users who completed form)."""
+    buttons = [
+        [
+            {
+                "action": {"type": "text", "label": "Меню"},
+                "color": "primary"
+            },
+            {
+                "action": {"type": "text", "label": "Тестирование"},
+                "color": "positive"
+            }
+        ]
+    ]
+    
+    if is_admin:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "АДМИН"},
+                "color": "negative"
+            }
+        ])
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
+    }
+
+def create_admin_keyboard() -> Dict:
+    """Admin panel keyboard."""
     return {
         "one_time": False,
         "inline": False,
@@ -304,10 +442,12 @@ def create_menu_keyboard_with_test() -> Dict:
                 {
                     "action": {"type": "text", "label": "Меню"},
                     "color": "primary"
-                },
+                }
+            ],
+            [
                 {
-                    "action": {"type": "text", "label": "Тестирование"},
-                    "color": "positive"
+                    "action": {"type": "text", "label": "АДМИН"},
+                    "color": "negative"
                 }
             ]
         ]
@@ -403,6 +543,94 @@ def get_correct_answer_text(question: Dict) -> str:
 
 
 # -----------------------------------------------------------------------------
+# Database Export Helper
+# -----------------------------------------------------------------------------
+def create_users_xlsx(users: List[Dict]) -> bytes:
+    """Create XLSX file with users data."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Пользователи"
+    
+    # Define headers
+    headers = [
+        "ID пользователя",
+        "Имя",
+        "Анкета заполнена",
+        "Ответ анкеты",
+        "Тест 1",
+        "Тест 2",
+        "Тест 3",
+        "Тест 4",
+        "Дата создания",
+        "Дата обновления"
+    ]
+    
+    # Style for headers
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Write headers
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+    
+    # Write data
+    for row_num, user in enumerate(users, 2):
+        # Convert boolean values to Russian
+        def bool_ru(val):
+            return "Да" if val else "Нет"
+        
+        def format_datetime(dt):
+            if dt:
+                if isinstance(dt, str):
+                    return dt[:19] if len(dt) > 19 else dt
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            return ""
+        
+        row_data = [
+            user.get("user_id", ""),
+            user.get("user_name", ""),
+            bool_ru(user.get("form", False)),
+            user.get("form_answer", ""),
+            bool_ru(user.get("test_book_1", False)),
+            bool_ru(user.get("test_book_2", False)),
+            bool_ru(user.get("test_book_3", False)),
+            bool_ru(user.get("test_book_4", False)),
+            format_datetime(user.get("created_at", "")),
+            format_datetime(user.get("updated_at", ""))
+        ]
+        
+        for col, value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col, value=value)
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+    
+    # Adjust column widths
+    column_widths = [15, 25, 18, 40, 10, 10, 10, 10, 20, 20]
+    for col, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + col) if col <= 26 else f"A{chr(64 + col - 26)}"].width = width
+    
+    # Freeze first row
+    ws.freeze_panes = "A2"
+    
+    # Save to bytes
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
+
+
+# -----------------------------------------------------------------------------
 # Web Server
 # -----------------------------------------------------------------------------
 class WebServer:
@@ -426,6 +654,7 @@ class WebServer:
             "token_configured": bool(TOKEN),
             "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
             "check_test_ids": CHECK_TEST_IDS,
+            "user_admin_id": USER_ADMIN_ID,
             "tests_loaded": bool(TESTS_DATA),
             "texts_loaded": bool(TEXTS_DATA),
             "database_connected": db.pool is not None
@@ -480,6 +709,9 @@ class WebServer:
             
             print(f"User {user_id}: {text}", flush=True)
             
+            # Check if user is admin
+            is_admin = (user_id == USER_ADMIN_ID)
+            
             # Handle "Start" button
             if text.lower() in ["начать", "start", "/start"]:
                 # Clear any existing session
@@ -511,7 +743,7 @@ class WebServer:
                     user_id=user_id,
                     message="Добро пожаловать!\n\nБот не реагирует на текстовые сообщения. Используйте кнопки клавиатуры.",
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard_with_form() if not form_completed else create_menu_keyboard_with_test()
+                    keyboard=create_menu_keyboard_with_form(is_admin) if not form_completed else create_menu_keyboard_with_test(is_admin)
                 )
                 return
             
@@ -530,8 +762,13 @@ class WebServer:
                     user_id=user_id,
                     message="Выберите действие:",
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard_with_form() if not form_completed else create_menu_keyboard_with_test()
+                    keyboard=create_menu_keyboard_with_form(is_admin) if not form_completed else create_menu_keyboard_with_test(is_admin)
                 )
+                return
+            
+            # Handle "АДМИН" button - only for USER_ADMIN
+            if text.lower() == "админ" and is_admin:
+                await self._handle_admin_button(user_id, peer_id)
                 return
             
             # Handle "Анкета" button (stub)
@@ -540,7 +777,7 @@ class WebServer:
                     user_id=user_id,
                     message="Анкета находится в разработке...",
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard_with_form()
+                    keyboard=create_menu_keyboard_with_form(is_admin)
                 )
                 return
             
@@ -555,7 +792,7 @@ class WebServer:
                         user_id=user_id,
                         message="Сначала необходимо заполнить анкету!",
                         peer_id=peer_id,
-                        keyboard=create_menu_keyboard_with_form()
+                        keyboard=create_menu_keyboard_with_form(is_admin)
                     )
                     return
                 
@@ -578,6 +815,55 @@ class WebServer:
             
         except Exception as e:
             print(f"Message handling error: {e}", flush=True)
+
+    async def _handle_admin_button(self, user_id: int, peer_id: int) -> None:
+        """Handle admin button - export database to xlsx."""
+        print(f"Admin button pressed by user {user_id}", flush=True)
+        
+        try:
+            # Get all users from database
+            users = await db.get_all_users()
+            
+            if not users:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="База данных пуста.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                return
+            
+            # Create XLSX file
+            xlsx_data = create_users_xlsx(users)
+            
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"users_{timestamp}.xlsx"
+            
+            # Send document
+            success = await self.vk_api.send_document(
+                peer_id=peer_id,
+                file_data=xlsx_data,
+                filename=filename,
+                message=f"📊 База данных: {len(users)} пользователей"
+            )
+            
+            if not success:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="Ошибка при отправке файла.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+            
+        except Exception as e:
+            print(f"Error handling admin button: {e}", flush=True)
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=f"Ошибка: {e}",
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
 
     async def _start_test(self, user_id: int, peer_id: int) -> None:
         """Start new test for user."""
@@ -697,6 +983,9 @@ class WebServer:
         passing_score = TESTS_DATA.get("test_info", {}).get("passing_score", 18)
         passed = score >= passing_score
         
+        # Check if user is admin
+        is_admin = (user_id == USER_ADMIN_ID)
+        
         # Get user name for admin notification
         user_name = f"ID{user_id}"
         try:
@@ -736,7 +1025,7 @@ class WebServer:
                 user_id=user_id,
                 message=message,
                 peer_id=peer_id,
-                keyboard=create_menu_keyboard_with_test()
+                keyboard=create_menu_keyboard_with_test(is_admin)
             )
         else:
             failed_text = TEXTS_DATA.get("test_failed", "К сожалению, вы не набрали нужное количество баллов.")
