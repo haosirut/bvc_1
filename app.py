@@ -23,8 +23,8 @@ CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")
 CHECK_TEST_STR = os.getenv("CHECK_TEST", "")  # Admin IDs separated by comma
 PORT = int(os.getenv("PORT", "8080"))
 
-# Database connection
-DB_URL = os.getenv("BD", "")
+# Database configuration
+DATABASE_URL = os.getenv("BD", "")  # Full database URL
 DB_USER = os.getenv("BD_USER_NAME", "")
 DB_PASSWORD = os.getenv("BD_USER_PASSWORD", "")
 
@@ -45,8 +45,8 @@ print("VK BOT STARTING", flush=True)
 print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
 print(f"CHECK_TEST_IDS: {CHECK_TEST_IDS}", flush=True)
-print(f"DB_URL: {'SET' if DB_URL else 'NOT SET'}", flush=True)
-print(f"DB_USER: {'SET' if DB_USER else 'NOT SET'}", flush=True)
+print(f"DATABASE_URL: {'SET' if DATABASE_URL else 'NOT SET'}", flush=True)
+print(f"DB_USER: {DB_USER}", flush=True)
 print(f"PORT: {PORT}", flush=True)
 print("=" * 50, flush=True)
 
@@ -81,62 +81,59 @@ USER_SESSIONS: Dict[int, Dict] = {}
 # Database Helper
 # -----------------------------------------------------------------------------
 class Database:
-    """PostgreSQL database helper."""
+    """PostgreSQL database helper for user data."""
     
     def __init__(self):
         self.pool: Optional[asyncpg.Pool] = None
     
-    async def connect(self):
-        """Connect to database."""
-        if not DB_URL:
-            print("DB_URL not set, database disabled", flush=True)
-            return
-        
+    async def init(self):
+        """Initialize database connection pool and create table if not exists."""
         try:
             # Build connection string
-            conn_string = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_URL}"
+            if DATABASE_URL:
+                conn_string = DATABASE_URL
+            elif DB_USER and DB_PASSWORD:
+                conn_string = f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost/bvc_bot"
+            else:
+                print("No database configuration found!", flush=True)
+                return False
+            
+            print(f"Connecting to database...", flush=True)
             self.pool = await asyncpg.create_pool(conn_string, min_size=2, max_size=10)
-            print("Database connected successfully", flush=True)
             
             # Create table if not exists
-            await self._create_table()
+            async with self.pool.acquire() as conn:
+                await conn.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        user_id BIGINT PRIMARY KEY,
+                        user_name TEXT,
+                        form BOOLEAN DEFAULT FALSE,
+                        form_answer TEXT DEFAULT '',
+                        test_book_1 BOOLEAN DEFAULT FALSE,
+                        test_book_2 BOOLEAN DEFAULT FALSE,
+                        test_book_3 BOOLEAN DEFAULT FALSE,
+                        test_book_4 BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                print("Database table verified/created", flush=True)
+            
+            print("Database connection established", flush=True)
+            return True
+            
         except Exception as e:
-            print(f"Database connection error: {e}", flush=True)
-            self.pool = None
+            print(f"Database initialization error: {e}", flush=True)
+            return False
     
     async def close(self):
-        """Close database connection."""
+        """Close database connection pool."""
         if self.pool:
             await self.pool.close()
-            self.pool = None
-    
-    async def _create_table(self):
-        """Create users table if not exists."""
-        if not self.pool:
-            return
-        
-        query = """
-        CREATE TABLE IF NOT EXISTS users (
-            user_id BIGINT PRIMARY KEY,
-            user_name TEXT,
-            form BOOLEAN DEFAULT FALSE,
-            form_answer TEXT DEFAULT '',
-            test_book_1 BOOLEAN DEFAULT FALSE,
-            test_book_2 BOOLEAN DEFAULT FALSE,
-            test_book_3 BOOLEAN DEFAULT FALSE,
-            test_book_4 BOOLEAN DEFAULT FALSE
-        )
-        """
-        
-        try:
-            async with self.pool.acquire() as conn:
-                await conn.execute(query)
-            print("Table 'users' verified/created", flush=True)
-        except Exception as e:
-            print(f"Error creating table: {e}", flush=True)
+            print("Database connection closed", flush=True)
     
     async def get_user(self, user_id: int) -> Optional[Dict]:
-        """Get user from database."""
+        """Get user by ID."""
         if not self.pool:
             return None
         
@@ -149,45 +146,46 @@ class Database:
                     return dict(row)
                 return None
         except Exception as e:
-            print(f"Error getting user: {e}", flush=True)
+            print(f"Error getting user {user_id}: {e}", flush=True)
             return None
     
     async def create_user(self, user_id: int, user_name: str) -> bool:
-        """Create new user in database."""
+        """Create new user."""
         if not self.pool:
             return False
         
         try:
             async with self.pool.acquire() as conn:
-                await conn.execute(
-                    """
+                await conn.execute('''
                     INSERT INTO users (user_id, user_name, form, form_answer, 
                                        test_book_1, test_book_2, test_book_3, test_book_4)
                     VALUES ($1, $2, FALSE, '', FALSE, FALSE, FALSE, FALSE)
-                    ON CONFLICT (user_id) DO NOTHING
-                    """,
-                    user_id, user_name
-                )
-            print(f"User {user_id} created in database", flush=True)
-            return True
+                    ON CONFLICT (user_id) DO UPDATE SET user_name = $2, updated_at = CURRENT_TIMESTAMP
+                ''', user_id, user_name)
+                print(f"User {user_id} created/updated in database", flush=True)
+                return True
         except Exception as e:
-            print(f"Error creating user: {e}", flush=True)
+            print(f"Error creating user {user_id}: {e}", flush=True)
             return False
     
-    async def update_user_form(self, user_id: int, form: bool, form_answer: str = "") -> bool:
-        """Update user's form status."""
+    async def update_user_field(self, user_id: int, field: str, value: Any) -> bool:
+        """Update a specific field for user."""
         if not self.pool:
+            return False
+        
+        allowed_fields = ['form', 'form_answer', 'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 'user_name']
+        if field not in allowed_fields:
             return False
         
         try:
             async with self.pool.acquire() as conn:
                 await conn.execute(
-                    "UPDATE users SET form = $1, form_answer = $2 WHERE user_id = $3",
-                    form, form_answer, user_id
+                    f"UPDATE users SET {field} = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2",
+                    value, user_id
                 )
-            return True
+                return True
         except Exception as e:
-            print(f"Error updating user form: {e}", flush=True)
+            print(f"Error updating user {user_id} field {field}: {e}", flush=True)
             return False
 
 # Global database instance
@@ -277,44 +275,43 @@ def create_main_menu_keyboard() -> Dict:
         ]
     }
 
-def create_menu_keyboard(form_completed: bool = True) -> Dict:
-    """Menu with buttons based on user's form status."""
-    if form_completed:
-        # User completed form - show Testing button
-        return {
-            "one_time": False,
-            "inline": False,
-            "buttons": [
-                [
-                    {
-                        "action": {"type": "text", "label": "Меню"},
-                        "color": "primary"
-                    },
-                    {
-                        "action": {"type": "text", "label": "Тестирование"},
-                        "color": "positive"
-                    }
-                ]
+def create_menu_keyboard_with_form() -> Dict:
+    """Menu with Анкета button (for users who haven't completed form)."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "primary"
+                },
+                {
+                    "action": {"type": "text", "label": "Анкета"},
+                    "color": "positive"
+                }
             ]
-        }
-    else:
-        # User needs to complete form - show Form button
-        return {
-            "one_time": False,
-            "inline": False,
-            "buttons": [
-                [
-                    {
-                        "action": {"type": "text", "label": "Меню"},
-                        "color": "primary"
-                    },
-                    {
-                        "action": {"type": "text", "label": "Анкета"},
-                        "color": "positive"
-                    }
-                ]
+        ]
+    }
+
+def create_menu_keyboard_with_test() -> Dict:
+    """Menu with Testing button (for users who completed form)."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "primary"
+                },
+                {
+                    "action": {"type": "text", "label": "Тестирование"},
+                    "color": "positive"
+                }
             ]
-        }
+        ]
+    }
 
 def create_answer_keyboard(shuffled_answers: List[Dict]) -> Dict:
     """Keyboard with Menu button and answer buttons 1, 2, 3."""
@@ -429,9 +426,9 @@ class WebServer:
             "token_configured": bool(TOKEN),
             "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
             "check_test_ids": CHECK_TEST_IDS,
-            "db_connected": db.pool is not None,
             "tests_loaded": bool(TESTS_DATA),
-            "texts_loaded": bool(TEXTS_DATA)
+            "texts_loaded": bool(TEXTS_DATA),
+            "database_connected": db.pool is not None
         })
 
     async def vk_webhook(self, request: web.Request) -> web.Response:
@@ -483,13 +480,13 @@ class WebServer:
             
             print(f"User {user_id}: {text}", flush=True)
             
-            # Handle "Start" button - check/create user in DB
+            # Handle "Start" button
             if text.lower() in ["начать", "start", "/start"]:
                 # Clear any existing session
                 if user_id in USER_SESSIONS:
                     del USER_SESSIONS[user_id]
                 
-                # Get user info from VK
+                # Get user name from VK
                 user_name = f"ID{user_id}"
                 try:
                     user_info = await self.vk_api.get_user_info(user_id)
@@ -500,67 +497,68 @@ class WebServer:
                 except Exception as e:
                     print(f"Error getting user info: {e}", flush=True)
                 
-                # Check if user exists in database
+                # Check/create user in database
                 user_data = await db.get_user(user_id)
-                form_completed = False
-                
-                if user_data is None:
+                if not user_data:
                     # Create new user
                     await db.create_user(user_id, user_name)
-                    form_completed = False
-                    print(f"New user {user_id} created", flush=True)
-                else:
-                    form_completed = user_data.get("form", False)
-                    print(f"User {user_id} found, form_completed={form_completed}", flush=True)
+                    user_data = await db.get_user(user_id)
                 
-                # Send welcome message with appropriate menu
+                # Check FORM status
+                form_completed = user_data.get("form", False) if user_data else False
+                
                 await self.vk_api.send_message(
                     user_id=user_id,
                     message="Добро пожаловать!\n\nБот не реагирует на текстовые сообщения. Используйте кнопки клавиатуры.",
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard(form_completed)
+                    keyboard=create_menu_keyboard_with_form() if not form_completed else create_menu_keyboard_with_test()
                 )
                 return
             
-            # Get user data for menu decisions
-            user_data = await db.get_user(user_id)
-            form_completed = user_data.get("form", False) if user_data else True
-            
-            # Handle "Меню" button - always available, cancels any ongoing test
+            # Handle "Меню" button - always available
             if text.lower() == "меню":
                 # Clear session if user is in the middle of a test
                 if user_id in USER_SESSIONS:
                     del USER_SESSIONS[user_id]
                     print(f"Session cleared for user {user_id} - returned to menu", flush=True)
                 
+                # Check user FORM status
+                user_data = await db.get_user(user_id)
+                form_completed = user_data.get("form", False) if user_data else False
+                
                 await self.vk_api.send_message(
                     user_id=user_id,
                     message="Выберите действие:",
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard(form_completed)
+                    keyboard=create_menu_keyboard_with_form() if not form_completed else create_menu_keyboard_with_test()
                 )
                 return
             
-            # Handle "Анкета" button (only for users who haven't completed form)
+            # Handle "Анкета" button (stub)
             if text.lower() == "анкета":
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="Анкета в разработке...",
+                    message="Анкета находится в разработке...",
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard(form_completed)
+                    keyboard=create_menu_keyboard_with_form()
                 )
                 return
             
-            # Handle "Тестирование" button (only for users who completed form)
+            # Handle "Тестирование" button
             if text.lower() == "тестирование":
+                # Check if user completed form
+                user_data = await db.get_user(user_id)
+                form_completed = user_data.get("form", False) if user_data else False
+                
                 if not form_completed:
                     await self.vk_api.send_message(
                         user_id=user_id,
                         message="Сначала необходимо заполнить анкету!",
                         peer_id=peer_id,
-                        keyboard=create_menu_keyboard(form_completed)
+                        keyboard=create_menu_keyboard_with_form()
                     )
                     return
+                
                 await self._start_test(user_id, peer_id)
                 return
             
@@ -699,10 +697,6 @@ class WebServer:
         passing_score = TESTS_DATA.get("test_info", {}).get("passing_score", 18)
         passed = score >= passing_score
         
-        # Get user data for menu
-        user_data = await db.get_user(user_id)
-        form_completed = user_data.get("form", False) if user_data else True
-        
         # Get user name for admin notification
         user_name = f"ID{user_id}"
         try:
@@ -730,6 +724,10 @@ class WebServer:
                 except Exception as e:
                     print(f"Failed to send admin notification to {admin_id}: {e}", flush=True)
         
+        # Get user form status for correct keyboard
+        user_data = await db.get_user(user_id)
+        form_completed = user_data.get("form", False) if user_data else False
+        
         # Send result to user
         if passed:
             passed_text = TEXTS_DATA.get("test_passed", "🎉 Поздравляем! Вы сдали тест!")
@@ -738,7 +736,7 @@ class WebServer:
                 user_id=user_id,
                 message=message,
                 peer_id=peer_id,
-                keyboard=create_menu_keyboard(form_completed)
+                keyboard=create_menu_keyboard_with_test()
             )
         else:
             failed_text = TEXTS_DATA.get("test_failed", "К сожалению, вы не набрали нужное количество баллов.")
@@ -757,26 +755,30 @@ class WebServer:
 # -----------------------------------------------------------------------------
 # Entrypoint
 # -----------------------------------------------------------------------------
-async def init_app():
-    """Initialize application with database connection."""
-    await db.connect()
-    return web.Application()
-
-def main_sync():
+async def async_main():
+    """Async main entrypoint."""
     print("Creating web server...", flush=True)
-    
-    # Create app and connect to database
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
-    # Connect to database before starting server
-    loop.run_until_complete(db.connect())
-    
     server = WebServer()
     
-    print(f"Starting on port {PORT}...", flush=True)
-    web.run_app(server.app, host="0.0.0.0", port=PORT, print=lambda x: print(x, flush=True))
+    # Initialize database
+    await db.init()
+    
+    runner = web.AppRunner(server.app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    
+    print(f"Server started on port {PORT}", flush=True)
+    
+    try:
+        await asyncio.Event().wait()
+    except KeyboardInterrupt:
+        print("Shutting down...", flush=True)
+    finally:
+        await db.close()
+        await runner.cleanup()
+        print("Application shutdown complete", flush=True)
 
 
 if __name__ == "__main__":
-    main_sync()
+    asyncio.run(async_main())
