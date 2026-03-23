@@ -78,15 +78,22 @@ def load_json_file(filename: str) -> Dict:
         print(f"Error loading {filename}: {e}", flush=True)
         return {}
 
-# Load tests and texts
+# Load tests, texts and form
 TESTS_DATA = load_json_file("tests.json")
 TEXTS_DATA = load_json_file("texts.json")
+FORM_DATA = load_json_file("form.json")
 
 # -----------------------------------------------------------------------------
 # User Sessions Storage (in-memory)
 # Format: {user_id: {"variant": N, "question": N, "score": N, "shuffled_answers": [...]}}
 # -----------------------------------------------------------------------------
 USER_SESSIONS: Dict[int, Dict] = {}
+
+# -----------------------------------------------------------------------------
+# Form Sessions Storage (in-memory)
+# Format: {user_id: {"question": N, "answers": [str, str, ...]}}
+# -----------------------------------------------------------------------------
+FORM_SESSIONS: Dict[int, Dict] = {}
 
 # -----------------------------------------------------------------------------
 # Database Helper
@@ -566,6 +573,21 @@ def create_retry_keyboard() -> Dict:
         ]
     }
 
+def create_form_keyboard() -> Dict:
+    """Keyboard with only Menu button for form questions."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
 
 # -----------------------------------------------------------------------------
 # Test Logic
@@ -719,6 +741,7 @@ class WebServer:
             "user_admin_id": USER_ADMIN_ID,
             "tests_loaded": bool(TESTS_DATA),
             "texts_loaded": bool(TEXTS_DATA),
+            "form_loaded": bool(FORM_DATA),
             "database_connected": db.pool is not None
         })
 
@@ -776,9 +799,11 @@ class WebServer:
             
             # Handle "Start" button
             if text.lower() in ["начать", "start", "/start"]:
-                # Clear any existing session
+                # Clear any existing sessions
                 if user_id in USER_SESSIONS:
                     del USER_SESSIONS[user_id]
+                if user_id in FORM_SESSIONS:
+                    del FORM_SESSIONS[user_id]
                 
                 # Get user name from VK
                 user_name = f"ID{user_id}"
@@ -811,10 +836,15 @@ class WebServer:
             
             # Handle "Меню" button - always available
             if text.lower() == "меню":
-                # Clear session if user is in the middle of a test
+                # Clear test session if user is in the middle of a test
                 if user_id in USER_SESSIONS:
                     del USER_SESSIONS[user_id]
-                    print(f"Session cleared for user {user_id} - returned to menu", flush=True)
+                    print(f"Test session cleared for user {user_id} - returned to menu", flush=True)
+                
+                # Clear form session if user is in the middle of form
+                if user_id in FORM_SESSIONS:
+                    del FORM_SESSIONS[user_id]
+                    print(f"Form session cleared for user {user_id} - returned to menu", flush=True)
                 
                 # Check/create user by ID
                 user_data = await db.get_user(user_id)
@@ -866,14 +896,46 @@ class WebServer:
                 await self._handle_sync_users(user_id, peer_id)
                 return
             
-            # Handle "Анкета" button (stub)
+            # Handle "Анкета" button
             if text.lower() == "анкета":
+                # Check if user already completed form
+                user_data = await db.get_user(user_id)
+                form_completed = user_data.get("form", False) if user_data else False
+                
+                if form_completed:
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message="Вы уже заполнили анкету!",
+                        peer_id=peer_id,
+                        keyboard=create_menu_keyboard_with_test(is_admin)
+                    )
+                    return
+                
+                # Send warning message
+                warning_text = TEXTS_DATA.get("form_warning", "Если оборвать прохождение анкетирования, данные не сохранятся.")
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="Анкета находится в разработке...",
+                    message=warning_text,
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard_with_form(is_admin)
+                    keyboard=create_form_keyboard()
                 )
+                
+                # Start form session
+                FORM_SESSIONS[user_id] = {
+                    "question": 0,
+                    "answers": []
+                }
+                
+                # Send start message
+                start_text = TEXTS_DATA.get("form_start", "Начинаем заполнение анкеты.")
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message=start_text,
+                    peer_id=peer_id
+                )
+                
+                # Send first question
+                await self._send_form_question(user_id, peer_id)
                 return
             
             # Handle "Тестирование" button
@@ -903,6 +965,11 @@ class WebServer:
             # Handle answer buttons (1, 2, 3)
             if text in ["1", "2", "3"]:
                 await self._handle_answer(user_id, peer_id, int(text))
+                return
+            
+            # Handle form answer (if user is in form session)
+            if user_id in FORM_SESSIONS:
+                await self._handle_form_answer(user_id, peer_id, text)
                 return
             
             # Ignore all other text
@@ -1214,6 +1281,121 @@ class WebServer:
         
         # Clear session
         del USER_SESSIONS[user_id]
+
+    async def _send_form_question(self, user_id: int, peer_id: int) -> None:
+        """Send current form question to user."""
+        session = FORM_SESSIONS.get(user_id)
+        if not session:
+            print(f"No form session for user {user_id}", flush=True)
+            return
+        
+        questions = FORM_DATA.get("questions", [])
+        question_idx = session["question"]
+        
+        if question_idx >= len(questions):
+            print(f"Question index out of range: {question_idx}", flush=True)
+            return
+        
+        question = questions[question_idx]
+        total = len(questions)
+        
+        # Format question message
+        prefix_template = TEXTS_DATA.get("form_question_prefix", "Вопрос {current}/{total}:")
+        prefix = prefix_template.format(current=question_idx + 1, total=total)
+        message = f"{prefix}\n\n{question['question']}"
+        
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=message,
+            peer_id=peer_id,
+            keyboard=create_form_keyboard()
+        )
+
+    async def _handle_form_answer(self, user_id: int, peer_id: int, answer: str) -> None:
+        """Handle user's answer to form question."""
+        session = FORM_SESSIONS.get(user_id)
+        if not session:
+            print(f"No form session for user {user_id}", flush=True)
+            return
+        
+        # Save answer
+        session["answers"].append(answer)
+        
+        # Move to next question
+        session["question"] += 1
+        
+        questions = FORM_DATA.get("questions", [])
+        
+        # Check if form is complete
+        if session["question"] >= len(questions):
+            await self._finish_form(user_id, peer_id)
+        else:
+            await self._send_form_question(user_id, peer_id)
+
+    async def _finish_form(self, user_id: int, peer_id: int) -> None:
+        """Finish form and save results."""
+        session = FORM_SESSIONS.get(user_id)
+        if not session:
+            return
+        
+        answers = session["answers"]
+        questions = FORM_DATA.get("questions", [])
+        
+        # Get user name from first answer (trimmed)
+        user_name = answers[0].strip() if answers else f"ID{user_id}"
+        
+        # Format form answers as JSON string
+        form_answer = json.dumps(
+            [{"question": q["question"], "answer": a} for q, a in zip(questions, answers)],
+            ensure_ascii=False
+        )
+        
+        # Update user in database
+        await db.update_user_field(user_id, "user_name", user_name)
+        await db.update_user_field(user_id, "form_answer", form_answer)
+        await db.update_user_field(user_id, "form", True)
+        
+        print(f"Form completed for user {user_id}, name: {user_name}", flush=True)
+        
+        # Check if user is admin
+        is_admin = (user_id == USER_ADMIN_ID)
+        
+        # Send completion message
+        completed_text = TEXTS_DATA.get("form_completed", "✅ Анкета успешно заполнена!")
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=completed_text,
+            peer_id=peer_id,
+            keyboard=create_menu_keyboard_with_test(is_admin)
+        )
+        
+        # Send instructions
+        instructions_text = TEXTS_DATA.get("instructions", "Инструкция")
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=instructions_text,
+            peer_id=peer_id,
+            keyboard=create_menu_keyboard_with_test(is_admin)
+        )
+        
+        # Notify admin about form completion
+        if USER_ADMIN_ID:
+            # Create clickable link to user profile
+            user_link = f"[id{user_id}|{user_name}]"
+            notification_template = TEXTS_DATA.get("form_admin_notification", "Пользователь {user_link} заполнил анкету!")
+            admin_message = notification_template.format(user_link=user_link)
+            
+            try:
+                await self.vk_api.send_message(
+                    user_id=USER_ADMIN_ID,
+                    message=admin_message
+                )
+                print(f"Admin notification sent about form completion by user {user_id}", flush=True)
+            except Exception as e:
+                print(f"Failed to send admin notification: {e}", flush=True)
+        
+        # Clear form session
+        del FORM_SESSIONS[user_id]
 
 
 # -----------------------------------------------------------------------------
