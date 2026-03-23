@@ -29,10 +29,10 @@ USER_ADMIN = os.getenv("USER_ADMIN", "")  # Super admin ID for database export
 PORT = int(os.getenv("PORT", "8080"))
 
 # Database configuration (Amvera PostgreSQL)
-DB_HOST = os.getenv("BD", "")  # hostname from Amvera
+DB_HOST = os.getenv("DB_HOST", "")
 DB_NAME = os.getenv("DB_NAME", "")
-DB_USER = os.getenv("BD_USER_NAME", "")
-DB_PASSWORD = os.getenv("BD_USER_PASSWORD", "")
+DB_USER = os.getenv("DB_USER", "")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 # Parse admin IDs from comma-separated string
 CHECK_TEST_IDS = [int(id.strip()) for id in CHECK_TEST_STR.split(",") if id.strip()]
