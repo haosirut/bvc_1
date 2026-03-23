@@ -28,8 +28,9 @@ CHECK_TEST_STR = os.getenv("CHECK_TEST", "")  # Admin IDs for test notifications
 USER_ADMIN = os.getenv("USER_ADMIN", "")  # Super admin ID for database export
 PORT = int(os.getenv("PORT", "8080"))
 
-# Database configuration
-DATABASE_URL = os.getenv("BD", "")  # Full database URL
+# Database configuration (Amvera PostgreSQL)
+DB_HOST = os.getenv("BD", "")  # hostname from Amvera
+DB_NAME = os.getenv("DB_NAME", "")
 DB_USER = os.getenv("BD_USER_NAME", "")
 DB_PASSWORD = os.getenv("BD_USER_PASSWORD", "")
 
@@ -54,8 +55,9 @@ print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
 print(f"CHECK_TEST_IDS: {CHECK_TEST_IDS}", flush=True)
 print(f"USER_ADMIN_ID: {USER_ADMIN_ID}", flush=True)
-print(f"DATABASE_URL: {'SET' if DATABASE_URL else 'NOT SET'}", flush=True)
-print(f"DB_USER: {DB_USER}", flush=True)
+print(f"DB_HOST: {'SET' if DB_HOST else 'NOT SET'}", flush=True)
+print(f"DB_NAME: {'SET' if DB_NAME else 'NOT SET'}", flush=True)
+print(f"DB_USER: {'SET' if DB_USER else 'NOT SET'}", flush=True)
 print(f"PORT: {PORT}", flush=True)
 print("=" * 50, flush=True)
 
@@ -98,16 +100,19 @@ class Database:
     async def init(self):
         """Initialize database connection pool and create table if not exists."""
         try:
-            # Build connection string
-            if DATABASE_URL:
-                conn_string = DATABASE_URL
-            elif DB_USER and DB_PASSWORD:
-                conn_string = f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost/bvc_bot"
+            # Build connection string from Amvera variables
+            # Format: postgresql://user:password@host:5432/database
+            if DB_HOST and DB_NAME and DB_USER and DB_PASSWORD:
+                conn_string = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}"
             else:
                 print("No database configuration found!", flush=True)
+                print(f"DB_HOST: {'SET' if DB_HOST else 'NOT SET'}", flush=True)
+                print(f"DB_NAME: {'SET' if DB_NAME else 'NOT SET'}", flush=True)
+                print(f"DB_USER: {'SET' if DB_USER else 'NOT SET'}", flush=True)
+                print(f"DB_PASSWORD: {'SET' if DB_PASSWORD else 'NOT SET'}", flush=True)
                 return False
             
-            print(f"Connecting to database...", flush=True)
+            print(f"Connecting to database {DB_NAME} at {DB_HOST}...", flush=True)
             self.pool = await asyncpg.create_pool(conn_string, min_size=2, max_size=10)
             
             # Create table if not exists
