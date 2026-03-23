@@ -1344,13 +1344,16 @@ class WebServer:
         # Get user name from first answer (trimmed)
         user_name = answers[0].strip() if answers else f"ID{user_id}"
         
-        # Format form answers as JSON string
-        form_answer = json.dumps(
-            [{"question": q["question"], "answer": a} for q, a in zip(questions, answers)],
-            ensure_ascii=False
-        )
+        # Format form answers as readable text
+        form_answer_lines = []
+        for i, (q, a) in enumerate(zip(questions, answers), 1):
+            form_answer_lines.append(f"Вопрос {i}: {q['question']}")
+            form_answer_lines.append(f"Ответ {i}: {a}")
+            if i < len(questions):
+                form_answer_lines.append("")  # Empty line between Q&A
+        form_answer = "\n".join(form_answer_lines)
         
-        # Update user in database
+        # Update user in database: name, answers, form completed
         await db.update_user_field(user_id, "user_name", user_name)
         await db.update_user_field(user_id, "form_answer", form_answer)
         await db.update_user_field(user_id, "form", True)
@@ -1378,12 +1381,11 @@ class WebServer:
             keyboard=create_menu_keyboard_with_test(is_admin)
         )
         
-        # Notify admin about form completion
+        # Notify admin about form completion with full answers
         if USER_ADMIN_ID:
             # Create clickable link to user profile
             user_link = f"[id{user_id}|{user_name}]"
-            notification_template = TEXTS_DATA.get("form_admin_notification", "Пользователь {user_link} заполнил анкету!")
-            admin_message = notification_template.format(user_link=user_link)
+            admin_message = f"Пользователь {user_link}, прошел анкетирование!\n\n{form_answer}"
             
             try:
                 await self.vk_api.send_message(
