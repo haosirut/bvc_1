@@ -754,8 +754,26 @@ class WebServer:
                     del USER_SESSIONS[user_id]
                     print(f"Session cleared for user {user_id} - returned to menu", flush=True)
                 
-                # Check user FORM status
+                # Check/create user by ID
                 user_data = await db.get_user(user_id)
+                if not user_data:
+                    # Get user name from VK for new user
+                    user_name = f"ID{user_id}"
+                    try:
+                        user_info = await self.vk_api.get_user_info(user_id)
+                        if "response" in user_info and user_info["response"]:
+                            first_name = user_info["response"][0].get("first_name", "")
+                            last_name = user_info["response"][0].get("last_name", "")
+                            user_name = f"{first_name} {last_name}"
+                    except Exception as e:
+                        print(f"Error getting user info: {e}", flush=True)
+                    
+                    # Create new user
+                    await db.create_user(user_id, user_name)
+                    print(f"New user {user_id} ({user_name}) created via Menu button", flush=True)
+                    user_data = await db.get_user(user_id)
+                
+                # Get FORM status from user data
                 form_completed = user_data.get("form", False) if user_data else False
                 
                 await self.vk_api.send_message(
