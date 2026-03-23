@@ -287,6 +287,57 @@ class VKAPI:
         params = {"user_ids": user_id}
         return await self.call("users.get", params)
     
+    async def get_conversations(self, offset: int = 0, count: int = 200) -> Dict[str, Any]:
+        """Get conversations list with pagination."""
+        params = {
+            "offset": offset,
+            "count": count,
+            "filter": "all"
+        }
+        return await self.call("messages.getConversations", params)
+    
+    async def get_all_conversations(self) -> List[int]:
+        """Get all user IDs from conversations with pagination."""
+        all_user_ids = []
+        offset = 0
+        count = 200  # Max per request
+        
+        while True:
+            result = await self.get_conversations(offset=offset, count=count)
+            
+            if "error" in result:
+                print(f"Error getting conversations: {result['error']}", flush=True)
+                break
+            
+            if "response" not in result:
+                print(f"No response in conversations result: {result}", flush=True)
+                break
+            
+            items = result["response"].get("items", [])
+            if not items:
+                break
+            
+            for item in items:
+                conversation = item.get("conversation", {})
+                peer = conversation.get("peer", {})
+                peer_type = peer.get("type", "")
+                peer_id = peer.get("id", 0)
+                
+                # Only user conversations (not groups, not chats)
+                if peer_type == "user" and peer_id > 0:
+                    all_user_ids.append(peer_id)
+            
+            total_count = result["response"].get("count", 0)
+            offset += count
+            
+            print(f"Fetched {len(all_user_ids)} conversations, total available: {total_count}", flush=True)
+            
+            # Check if we got all
+            if offset >= total_count:
+                break
+        
+        return all_user_ids
+    
     async def get_upload_server(self, peer_id: int) -> Optional[str]:
         """Get upload server URL for documents."""
         result = await self.call("docs.getMessagesUploadServer", {"peer_id": peer_id, "type": "doc"})
@@ -438,21 +489,27 @@ def create_menu_keyboard_with_test(is_admin: bool = False) -> Dict:
     }
 
 def create_admin_keyboard() -> Dict:
-    """Admin panel keyboard."""
+    """Admin panel keyboard with submenu."""
     return {
         "one_time": False,
         "inline": False,
         "buttons": [
             [
                 {
-                    "action": {"type": "text", "label": "Меню"},
+                    "action": {"type": "text", "label": "Скачать базу"},
+                    "color": "positive"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Обновление базы"},
                     "color": "primary"
                 }
             ],
             [
                 {
-                    "action": {"type": "text", "label": "АДМИН"},
-                    "color": "negative"
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
                 }
             ]
         ]
@@ -789,9 +846,24 @@ class WebServer:
                 )
                 return
             
-            # Handle "АДМИН" button - only for USER_ADMIN
+            # Handle "АДМИН" button - only for USER_ADMIN (show admin menu)
             if text.lower() == "админ" and is_admin:
-                await self._handle_admin_button(user_id, peer_id)
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="🔧 Админ-панель:\n\nВыберите действие:",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                return
+            
+            # Handle "Скачать базу" button
+            if text.lower() == "скачать базу" and is_admin:
+                await self._handle_download_db(user_id, peer_id)
+                return
+            
+            # Handle "Обновление базы" button
+            if text.lower() == "обновление базы" and is_admin:
+                await self._handle_sync_users(user_id, peer_id)
                 return
             
             # Handle "Анкета" button (stub)
@@ -839,9 +911,9 @@ class WebServer:
         except Exception as e:
             print(f"Message handling error: {e}", flush=True)
 
-    async def _handle_admin_button(self, user_id: int, peer_id: int) -> None:
-        """Handle admin button - export database to xlsx."""
-        print(f"Admin button pressed by user {user_id}", flush=True)
+    async def _handle_download_db(self, user_id: int, peer_id: int) -> None:
+        """Handle 'Скачать базу' button - export database to xlsx."""
+        print(f"Download DB button pressed by user {user_id}", flush=True)
         
         try:
             # Get all users from database
@@ -880,10 +952,90 @@ class WebServer:
                 )
             
         except Exception as e:
-            print(f"Error handling admin button: {e}", flush=True)
+            print(f"Error handling download DB: {e}", flush=True)
             await self.vk_api.send_message(
                 user_id=user_id,
                 message=f"Ошибка: {e}",
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
+
+    async def _handle_sync_users(self, user_id: int, peer_id: int) -> None:
+        """Handle 'Обновление базы' button - sync all VK conversations to database."""
+        print(f"Sync users button pressed by user {user_id}", flush=True)
+        
+        try:
+            # Notify admin that sync started
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message="🔄 Начинаю синхронизацию пользователей из чатов...",
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
+            
+            # Get all conversations
+            all_user_ids = await self.vk_api.get_all_conversations()
+            
+            if not all_user_ids:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="Чаты не найдены.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                return
+            
+            print(f"Found {len(all_user_ids)} user conversations", flush=True)
+            
+            # Get existing users from database
+            existing_users = await db.get_all_users()
+            existing_ids = set(u.get("user_id") for u in existing_users) if existing_users else set()
+            
+            # Find new users
+            new_user_ids = [uid for uid in all_user_ids if uid not in existing_ids]
+            
+            if not new_user_ids:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message=f"✅ Синхронизация завершена.\n\nВсего чатов: {len(all_user_ids)}\nНовых пользователей: 0\nВсе уже есть в базе.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                return
+            
+            # Create new users
+            created_count = 0
+            for new_user_id in new_user_ids:
+                # Get user name from VK
+                user_name = f"ID{new_user_id}"
+                try:
+                    user_info = await self.vk_api.get_user_info(new_user_id)
+                    if "response" in user_info and user_info["response"]:
+                        first_name = user_info["response"][0].get("first_name", "")
+                        last_name = user_info["response"][0].get("last_name", "")
+                        user_name = f"{first_name} {last_name}"
+                except Exception as e:
+                    print(f"Error getting user info for {new_user_id}: {e}", flush=True)
+                
+                # Create user in database
+                success = await db.create_user(new_user_id, user_name)
+                if success:
+                    created_count += 1
+                    print(f"Created user {new_user_id} ({user_name})", flush=True)
+            
+            # Send result
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=f"✅ Синхронизация завершена.\n\nВсего чатов: {len(all_user_ids)}\nУже в базе: {len(existing_ids)}\nДобавлено новых: {created_count}",
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
+            
+        except Exception as e:
+            print(f"Error handling sync users: {e}", flush=True)
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=f"❌ Ошибка синхронизации: {e}",
                 peer_id=peer_id,
                 keyboard=create_admin_keyboard()
             )
