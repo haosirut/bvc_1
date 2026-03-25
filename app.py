@@ -96,6 +96,13 @@ USER_SESSIONS: Dict[int, Dict] = {}
 FORM_SESSIONS: Dict[int, Dict] = {}
 
 # -----------------------------------------------------------------------------
+# Admin Search Sessions (in-memory)
+# Format: {admin_id: {"step": str, "search_text": str, "results": [Dict], "page": int, "selected_user_id": int}}
+# Steps: "search", "select_user", "select_course", "confirm_action"
+# -----------------------------------------------------------------------------
+ADMIN_SEARCH_SESSIONS: Dict[int, Dict] = {}
+
+# -----------------------------------------------------------------------------
 # Database Helper
 # -----------------------------------------------------------------------------
 class Database:
@@ -134,11 +141,46 @@ class Database:
                         test_book_2 BOOLEAN DEFAULT FALSE,
                         test_book_3 BOOLEAN DEFAULT FALSE,
                         test_book_4 BOOLEAN DEFAULT FALSE,
+                        course_1 BOOLEAN DEFAULT FALSE,
+                        course_2 BOOLEAN DEFAULT FALSE,
+                        course_3 BOOLEAN DEFAULT FALSE,
+                        course_4 BOOLEAN DEFAULT FALSE,
+                        access_survey_1 BOOLEAN DEFAULT FALSE,
+                        access_survey_2 BOOLEAN DEFAULT FALSE,
+                        access_survey_3 BOOLEAN DEFAULT FALSE,
+                        access_survey_4 BOOLEAN DEFAULT FALSE,
+                        fortune_wheel_1 BOOLEAN DEFAULT FALSE,
+                        fortune_wheel_2 BOOLEAN DEFAULT FALSE,
+                        fortune_wheel_3 BOOLEAN DEFAULT FALSE,
+                        fortune_wheel_4 BOOLEAN DEFAULT FALSE,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
                 ''')
                 print("Database table verified/created", flush=True)
+            
+            # Add new columns if they don't exist (for existing tables)
+            async with self.pool.acquire() as conn:
+                new_columns = [
+                    ("course_1", "BOOLEAN DEFAULT FALSE"),
+                    ("course_2", "BOOLEAN DEFAULT FALSE"),
+                    ("course_3", "BOOLEAN DEFAULT FALSE"),
+                    ("course_4", "BOOLEAN DEFAULT FALSE"),
+                    ("access_survey_1", "BOOLEAN DEFAULT FALSE"),
+                    ("access_survey_2", "BOOLEAN DEFAULT FALSE"),
+                    ("access_survey_3", "BOOLEAN DEFAULT FALSE"),
+                    ("access_survey_4", "BOOLEAN DEFAULT FALSE"),
+                    ("fortune_wheel_1", "BOOLEAN DEFAULT FALSE"),
+                    ("fortune_wheel_2", "BOOLEAN DEFAULT FALSE"),
+                    ("fortune_wheel_3", "BOOLEAN DEFAULT FALSE"),
+                    ("fortune_wheel_4", "BOOLEAN DEFAULT FALSE"),
+                ]
+                for col_name, col_type in new_columns:
+                    try:
+                        await conn.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col_name} {col_type}")
+                    except Exception as e:
+                        print(f"Column {col_name} might already exist: {e}", flush=True)
+                print("Database columns verified/added", flush=True)
             
             print("Database connection established", flush=True)
             return True
@@ -207,7 +249,12 @@ class Database:
         if not self.pool:
             return False
         
-        allowed_fields = ['form', 'form_answer', 'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 'user_name']
+        allowed_fields = [
+            'form', 'form_answer', 'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 'user_name',
+            'course_1', 'course_2', 'course_3', 'course_4',
+            'access_survey_1', 'access_survey_2', 'access_survey_3', 'access_survey_4',
+            'fortune_wheel_1', 'fortune_wheel_2', 'fortune_wheel_3', 'fortune_wheel_4'
+        ]
         if field not in allowed_fields:
             return False
         
@@ -221,6 +268,23 @@ class Database:
         except Exception as e:
             print(f"Error updating user {user_id} field {field}: {e}", flush=True)
             return False
+    
+    async def search_users_by_name(self, search_text: str) -> List[Dict]:
+        """Search users by name (case-insensitive partial match)."""
+        if not self.pool:
+            return []
+        
+        try:
+            async with self.pool.acquire() as conn:
+                # Case-insensitive search with ILIKE
+                rows = await conn.fetch(
+                    "SELECT user_id, user_name, form FROM users WHERE user_name ILIKE $1 ORDER BY user_name",
+                    f"%{search_text}%"
+                )
+                return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"Error searching users by name '{search_text}': {e}", flush=True)
+            return []
 
 # Global database instance
 db = Database()
@@ -515,11 +579,167 @@ def create_admin_keyboard() -> Dict:
             ],
             [
                 {
+                    "action": {"type": "text", "label": "Открыть доступ к Анкете"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
                     "action": {"type": "text", "label": "Меню"},
                     "color": "secondary"
                 }
             ]
         ]
+    }
+
+def create_user_search_keyboard(users: List[Dict], page: int = 0, per_page: int = 6) -> Dict:
+    """Create keyboard with found users (6 per page with pagination)."""
+    start_idx = page * per_page
+    end_idx = start_idx + per_page
+    page_users = users[start_idx:end_idx]
+    total_pages = (len(users) + per_page - 1) // per_page
+    
+    buttons = []
+    
+    # Add user buttons (2 per row, 3 rows = 6 users)
+    for i in range(0, len(page_users), 2):
+        row = []
+        for j in range(2):
+            if i + j < len(page_users):
+                user = page_users[i + j]
+                user_name = user.get("user_name", "Unknown")[:20]  # Limit button text
+                user_id = user.get("user_id")
+                row.append({
+                    "action": {"type": "text", "label": f"👤{user_name}"},
+                    "color": "primary"
+                })
+        if row:
+            buttons.append(row)
+    
+    # Add navigation buttons
+    nav_row = [
+        {
+            "action": {"type": "text", "label": "Меню"},
+            "color": "secondary"
+        }
+    ]
+    
+    if page > 0:
+        nav_row.append({
+            "action": {"type": "text", "label": "◀️ Назад"},
+            "color": "primary"
+        })
+    
+    if page < total_pages - 1:
+        nav_row.append({
+            "action": {"type": "text", "label": "Далее ▶️"},
+            "color": "primary"
+        })
+    
+    nav_row.append({
+        "action": {"type": "text", "label": "🔄 Заново"},
+        "color": "primary"
+    })
+    
+    buttons.append(nav_row)
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
+    }
+
+def create_course_selection_keyboard() -> Dict:
+    """Keyboard for selecting course number."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "1"},
+                    "color": "primary"
+                },
+                {
+                    "action": {"type": "text", "label": "2"},
+                    "color": "primary"
+                },
+                {
+                    "action": {"type": "text", "label": "3"},
+                    "color": "primary"
+                },
+                {
+                    "action": {"type": "text", "label": "4"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+def create_access_action_keyboard() -> Dict:
+    """Keyboard for opening/closing access."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "🔓 Открыть"},
+                    "color": "positive"
+                },
+                {
+                    "action": {"type": "text", "label": "🔒 Закрыть"},
+                    "color": "negative"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+def create_menu_keyboard_with_final_survey(is_admin: bool = False) -> Dict:
+    """Menu with Testing and Final Survey buttons (for users who have access to final survey)."""
+    buttons = [
+        [
+            {
+                "action": {"type": "text", "label": "Меню"},
+                "color": "primary"
+            },
+            {
+                "action": {"type": "text", "label": "Тестирование"},
+                "color": "positive"
+            }
+        ],
+        [
+            {
+                "action": {"type": "text", "label": "Финальное анкетирование"},
+                "color": "positive"
+            }
+        ]
+    ]
+    
+    if is_admin:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "АДМИН"},
+                "color": "negative"
+            }
+        ])
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
     }
 
 def create_answer_keyboard(shuffled_answers: List[Dict]) -> Dict:
@@ -804,6 +1024,8 @@ class WebServer:
                     del USER_SESSIONS[user_id]
                 if user_id in FORM_SESSIONS:
                     del FORM_SESSIONS[user_id]
+                if user_id in ADMIN_SEARCH_SESSIONS:
+                    del ADMIN_SEARCH_SESSIONS[user_id]
                 
                 # Get user name from VK
                 user_name = f"ID{user_id}"
@@ -823,14 +1045,28 @@ class WebServer:
                     await db.create_user(user_id, user_name)
                     user_data = await db.get_user(user_id)
                 
-                # Check FORM status
+                # Check FORM status and access to final survey
                 form_completed = user_data.get("form", False) if user_data else False
+                has_final_survey_access = any([
+                    user_data.get("access_survey_1", False),
+                    user_data.get("access_survey_2", False),
+                    user_data.get("access_survey_3", False),
+                    user_data.get("access_survey_4", False)
+                ]) if user_data else False
+                
+                # Choose appropriate keyboard
+                if has_final_survey_access:
+                    keyboard = create_menu_keyboard_with_final_survey(is_admin)
+                elif form_completed:
+                    keyboard = create_menu_keyboard_with_test(is_admin)
+                else:
+                    keyboard = create_menu_keyboard_with_form(is_admin)
                 
                 await self.vk_api.send_message(
                     user_id=user_id,
                     message="Добро пожаловать!\n\nБот не реагирует на текстовые сообщения. Используйте кнопки клавиатуры.",
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard_with_form(is_admin) if not form_completed else create_menu_keyboard_with_test(is_admin)
+                    keyboard=keyboard
                 )
                 return
             
@@ -845,6 +1081,11 @@ class WebServer:
                 if user_id in FORM_SESSIONS:
                     del FORM_SESSIONS[user_id]
                     print(f"Form session cleared for user {user_id} - returned to menu", flush=True)
+                
+                # Clear admin search session
+                if user_id in ADMIN_SEARCH_SESSIONS:
+                    del ADMIN_SEARCH_SESSIONS[user_id]
+                    print(f"Admin search session cleared for user {user_id} - returned to menu", flush=True)
                 
                 # Check/create user by ID
                 user_data = await db.get_user(user_id)
@@ -865,14 +1106,28 @@ class WebServer:
                     print(f"New user {user_id} ({user_name}) created via Menu button", flush=True)
                     user_data = await db.get_user(user_id)
                 
-                # Get FORM status from user data
+                # Get FORM status and access to final survey
                 form_completed = user_data.get("form", False) if user_data else False
+                has_final_survey_access = any([
+                    user_data.get("access_survey_1", False),
+                    user_data.get("access_survey_2", False),
+                    user_data.get("access_survey_3", False),
+                    user_data.get("access_survey_4", False)
+                ]) if user_data else False
+                
+                # Choose appropriate keyboard
+                if has_final_survey_access:
+                    keyboard = create_menu_keyboard_with_final_survey(is_admin)
+                elif form_completed:
+                    keyboard = create_menu_keyboard_with_test(is_admin)
+                else:
+                    keyboard = create_menu_keyboard_with_form(is_admin)
                 
                 await self.vk_api.send_message(
                     user_id=user_id,
                     message="Выберите действие:",
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard_with_form(is_admin) if not form_completed else create_menu_keyboard_with_test(is_admin)
+                    keyboard=keyboard
                 )
                 return
             
@@ -894,6 +1149,192 @@ class WebServer:
             # Handle "Обновление базы" button
             if text.lower() == "обновление базы" and is_admin:
                 await self._handle_sync_users(user_id, peer_id)
+                return
+            
+            # Handle "Открыть доступ к Анкете" button
+            if text.lower() == "открыть доступ к анкете" and is_admin:
+                # Clear any existing admin search session
+                if user_id in ADMIN_SEARCH_SESSIONS:
+                    del ADMIN_SEARCH_SESSIONS[user_id]
+                
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="🔍 Поиск пользователя:\n\nВведите имя или часть имени для поиска:",
+                    peer_id=peer_id,
+                    keyboard=create_main_menu_keyboard()
+                )
+                # Start admin search session
+                ADMIN_SEARCH_SESSIONS[user_id] = {
+                    "step": "search",
+                    "search_text": "",
+                    "results": [],
+                    "page": 0,
+                    "selected_user_id": None,
+                    "selected_course": None
+                }
+                return
+            
+            # Handle admin search session
+            if is_admin and user_id in ADMIN_SEARCH_SESSIONS:
+                session = ADMIN_SEARCH_SESSIONS[user_id]
+                
+                # Handle pagination - "Далее"
+                if text.startswith("Далее"):
+                    session["page"] += 1
+                    await self._show_search_results(user_id, peer_id)
+                    return
+                
+                # Handle pagination - "Назад"
+                if text.startswith("◀️") or text == "Назад":
+                    session["page"] = max(0, session["page"] - 1)
+                    await self._show_search_results(user_id, peer_id)
+                    return
+                
+                # Handle "Заново" - restart search
+                if text.startswith("🔄") or text == "Заново":
+                    del ADMIN_SEARCH_SESSIONS[user_id]
+                    ADMIN_SEARCH_SESSIONS[user_id] = {
+                        "step": "search",
+                        "search_text": "",
+                        "results": [],
+                        "page": 0,
+                        "selected_user_id": None,
+                        "selected_course": None
+                    }
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message="🔍 Введите имя или часть имени для поиска:",
+                        peer_id=peer_id,
+                        keyboard=create_main_menu_keyboard()
+                    )
+                    return
+                
+                # Handle user selection (username button)
+                if text.startswith("👤"):
+                    # Extract user name from button and find user in results
+                    selected_name = text[1:].strip()  # Remove 👤 prefix
+                    # Find user in results by name
+                    for user in session["results"]:
+                        if user.get("user_name", "").startswith(selected_name):
+                            session["selected_user_id"] = user.get("user_id")
+                            session["step"] = "select_course"
+                            break
+                    
+                    if session["selected_user_id"]:
+                        await self.vk_api.send_message(
+                            user_id=user_id,
+                            message=f"Выберите курс для пользователя:\n{selected_name}",
+                            peer_id=peer_id,
+                            keyboard=create_course_selection_keyboard()
+                        )
+                    return
+                
+                # Handle course selection (1-4) when selecting user
+                if session["step"] == "select_course" and text in ["1", "2", "3", "4"]:
+                    session["selected_course"] = int(text)
+                    session["step"] = "confirm_action"
+                    
+                    # Get selected user info
+                    selected_user = await db.get_user(session["selected_user_id"])
+                    user_name = selected_user.get("user_name", "Unknown") if selected_user else "Unknown"
+                    
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message=f"Выберите действие с доступом к финальной анкете после прохождения курса {text}:\n\nПользователь: {user_name}",
+                        peer_id=peer_id,
+                        keyboard=create_access_action_keyboard()
+                    )
+                    return
+                
+                # Handle "Открыть" - open access
+                if session["step"] == "confirm_action" and text.startswith("🔓"):
+                    course = session["selected_course"]
+                    target_user_id = session["selected_user_id"]
+                    field_name = f"access_survey_{course}"
+                    
+                    # Update database
+                    await db.update_user_field(target_user_id, field_name, True)
+                    
+                    # Get user info
+                    target_user = await db.get_user(target_user_id)
+                    user_name = target_user.get("user_name", "Unknown") if target_user else "Unknown"
+                    
+                    # Notify admin
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message=f"✅ Доступ к финальной анкете курса {course} ОТКРЫТ для:\n{user_name}",
+                        peer_id=peer_id,
+                        keyboard=create_admin_keyboard()
+                    )
+                    
+                    # Notify user
+                    try:
+                        await self.vk_api.send_message(
+                            user_id=target_user_id,
+                            message=f"Вам открыт доступ к прохождению анкетирования после прохождения курса {course} - используйте кнопки меню",
+                            peer_id=target_user_id
+                        )
+                    except Exception as e:
+                        print(f"Failed to notify user {target_user_id}: {e}", flush=True)
+                    
+                    del ADMIN_SEARCH_SESSIONS[user_id]
+                    return
+                
+                # Handle "Закрыть" - close access
+                if session["step"] == "confirm_action" and text.startswith("🔒"):
+                    course = session["selected_course"]
+                    target_user_id = session["selected_user_id"]
+                    field_name = f"access_survey_{course}"
+                    
+                    # Update database
+                    await db.update_user_field(target_user_id, field_name, False)
+                    
+                    # Get user info
+                    target_user = await db.get_user(target_user_id)
+                    user_name = target_user.get("user_name", "Unknown") if target_user else "Unknown"
+                    
+                    # Notify admin
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message=f"🔒 Доступ к финальной анкете курса {course} ЗАКРЫТ для:\n{user_name}",
+                        peer_id=peer_id,
+                        keyboard=create_admin_keyboard()
+                    )
+                    
+                    del ADMIN_SEARCH_SESSIONS[user_id]
+                    return
+                
+                # Handle search text input
+                if session["step"] == "search" and text:
+                    # Search users by name
+                    results = await db.search_users_by_name(text)
+                    
+                    if not results:
+                        await self.vk_api.send_message(
+                            user_id=user_id,
+                            message=f"По запросу \"{text}\" ничего не найдено.\n\nПопробуйте другой поиск:",
+                            peer_id=peer_id,
+                            keyboard=create_main_menu_keyboard()
+                        )
+                        return
+                    
+                    session["search_text"] = text
+                    session["results"] = results
+                    session["page"] = 0
+                    session["step"] = "select_user"
+                    
+                    await self._show_search_results(user_id, peer_id)
+                    return
+            
+            # Handle "Финальное анкетирование" button
+            if text.lower() == "финальное анкетирование":
+                # Stub for now
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="Тут будет анкетирование после прохождения курса",
+                    peer_id=peer_id,
+                    keyboard=create_menu_keyboard_with_final_survey(is_admin)
+                )
                 return
             
             # Handle "Анкета" button
@@ -1398,6 +1839,38 @@ class WebServer:
         
         # Clear form session
         del FORM_SESSIONS[user_id]
+
+    async def _show_search_results(self, user_id: int, peer_id: int) -> None:
+        """Show search results with pagination."""
+        session = ADMIN_SEARCH_SESSIONS.get(user_id)
+        if not session:
+            return
+        
+        results = session["results"]
+        page = session["page"]
+        per_page = 6
+        total_pages = (len(results) + per_page - 1) // per_page
+        
+        # Create keyboard with users
+        keyboard = create_user_search_keyboard(results, page, per_page)
+        
+        # Create message
+        search_text = session["search_text"]
+        total = len(results)
+        start_idx = page * per_page + 1
+        end_idx = min((page + 1) * per_page, total)
+        
+        message = f"🔍 Результаты поиска \"{search_text}\":\n\n"
+        message += f"Найдено: {total} пользователей\n"
+        message += f"Страница {page + 1}/{total_pages}\n\n"
+        message += "Выберите пользователя:"
+        
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=message,
+            peer_id=peer_id,
+            keyboard=keyboard
+        )
 
 
 # -----------------------------------------------------------------------------
