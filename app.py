@@ -4,11 +4,16 @@ import json
 import logging
 import asyncio
 import random
+import io
 from typing import Any, Dict, Optional, List
 from copy import deepcopy
+from datetime import datetime
 
 import aiohttp
 from aiohttp import web
+import asyncpg
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
 # Force unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
@@ -19,11 +24,21 @@ sys.stderr.reconfigure(line_buffering=True)
 # -----------------------------------------------------------------------------
 TOKEN = os.getenv("TOKEN", "")
 CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")
-CHECK_TEST_STR = os.getenv("CHECK_TEST", "")  # Admin IDs separated by comma
+CHECK_TEST_STR = os.getenv("CHECK_TEST", "")  # Admin IDs for test notifications
+USER_ADMIN = os.getenv("USER_ADMIN", "")  # Super admin ID for database export
 PORT = int(os.getenv("PORT", "8080"))
+
+# Database configuration (Amvera PostgreSQL)
+DB_HOST = os.getenv("DB_HOST", "")
+DB_NAME = os.getenv("DB_NAME", "")
+DB_USER = os.getenv("DB_USER", "")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 # Parse admin IDs from comma-separated string
 CHECK_TEST_IDS = [int(id.strip()) for id in CHECK_TEST_STR.split(",") if id.strip()]
+
+# Parse super admin ID
+USER_ADMIN_ID = int(USER_ADMIN) if USER_ADMIN else 0
 
 # Setup logging
 logging.basicConfig(
@@ -39,6 +54,10 @@ print("VK BOT STARTING", flush=True)
 print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
 print(f"CHECK_TEST_IDS: {CHECK_TEST_IDS}", flush=True)
+print(f"USER_ADMIN_ID: {USER_ADMIN_ID}", flush=True)
+print(f"DB_HOST: {'SET' if DB_HOST else 'NOT SET'}", flush=True)
+print(f"DB_NAME: {'SET' if DB_NAME else 'NOT SET'}", flush=True)
+print(f"DB_USER: {'SET' if DB_USER else 'NOT SET'}", flush=True)
 print(f"PORT: {PORT}", flush=True)
 print("=" * 50, flush=True)
 
@@ -59,15 +78,152 @@ def load_json_file(filename: str) -> Dict:
         print(f"Error loading {filename}: {e}", flush=True)
         return {}
 
-# Load tests and texts
+# Load tests, texts and form
 TESTS_DATA = load_json_file("tests.json")
 TEXTS_DATA = load_json_file("texts.json")
+FORM_DATA = load_json_file("form.json")
 
 # -----------------------------------------------------------------------------
 # User Sessions Storage (in-memory)
 # Format: {user_id: {"variant": N, "question": N, "score": N, "shuffled_answers": [...]}}
 # -----------------------------------------------------------------------------
 USER_SESSIONS: Dict[int, Dict] = {}
+
+# -----------------------------------------------------------------------------
+# Form Sessions Storage (in-memory)
+# Format: {user_id: {"question": N, "answers": [str, str, ...]}}
+# -----------------------------------------------------------------------------
+FORM_SESSIONS: Dict[int, Dict] = {}
+
+# -----------------------------------------------------------------------------
+# Database Helper
+# -----------------------------------------------------------------------------
+class Database:
+    """PostgreSQL database helper for user data."""
+    
+    def __init__(self):
+        self.pool: Optional[asyncpg.Pool] = None
+    
+    async def init(self):
+        """Initialize database connection pool and create table if not exists."""
+        try:
+            # Build connection string from Amvera variables
+            # Format: postgresql://user:password@host:5432/database
+            if DB_HOST and DB_NAME and DB_USER and DB_PASSWORD:
+                conn_string = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}"
+            else:
+                print("No database configuration found!", flush=True)
+                print(f"DB_HOST: {'SET' if DB_HOST else 'NOT SET'}", flush=True)
+                print(f"DB_NAME: {'SET' if DB_NAME else 'NOT SET'}", flush=True)
+                print(f"DB_USER: {'SET' if DB_USER else 'NOT SET'}", flush=True)
+                print(f"DB_PASSWORD: {'SET' if DB_PASSWORD else 'NOT SET'}", flush=True)
+                return False
+            
+            print(f"Connecting to database {DB_NAME} at {DB_HOST}...", flush=True)
+            self.pool = await asyncpg.create_pool(conn_string, min_size=2, max_size=10)
+            
+            # Create table if not exists
+            async with self.pool.acquire() as conn:
+                await conn.execute('''
+                    CREATE TABLE IF NOT EXISTS users (
+                        user_id BIGINT PRIMARY KEY,
+                        user_name TEXT,
+                        form BOOLEAN DEFAULT FALSE,
+                        form_answer TEXT DEFAULT '',
+                        test_book_1 BOOLEAN DEFAULT FALSE,
+                        test_book_2 BOOLEAN DEFAULT FALSE,
+                        test_book_3 BOOLEAN DEFAULT FALSE,
+                        test_book_4 BOOLEAN DEFAULT FALSE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                print("Database table verified/created", flush=True)
+            
+            print("Database connection established", flush=True)
+            return True
+            
+        except Exception as e:
+            print(f"Database initialization error: {e}", flush=True)
+            return False
+    
+    async def close(self):
+        """Close database connection pool."""
+        if self.pool:
+            await self.pool.close()
+            print("Database connection closed", flush=True)
+    
+    async def get_user(self, user_id: int) -> Optional[Dict]:
+        """Get user by ID."""
+        if not self.pool:
+            return None
+        
+        try:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT * FROM users WHERE user_id = $1", user_id
+                )
+                if row:
+                    return dict(row)
+                return None
+        except Exception as e:
+            print(f"Error getting user {user_id}: {e}", flush=True)
+            return None
+    
+    async def get_all_users(self) -> List[Dict]:
+        """Get all users from database."""
+        if not self.pool:
+            return []
+        
+        try:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch("SELECT * FROM users ORDER BY created_at DESC")
+                return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"Error getting all users: {e}", flush=True)
+            return []
+    
+    async def create_user(self, user_id: int, user_name: str) -> bool:
+        """Create new user."""
+        if not self.pool:
+            return False
+        
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.execute('''
+                    INSERT INTO users (user_id, user_name, form, form_answer, 
+                                       test_book_1, test_book_2, test_book_3, test_book_4)
+                    VALUES ($1, $2, FALSE, '', FALSE, FALSE, FALSE, FALSE)
+                    ON CONFLICT (user_id) DO UPDATE SET user_name = $2, updated_at = CURRENT_TIMESTAMP
+                ''', user_id, user_name)
+                print(f"User {user_id} created/updated in database", flush=True)
+                return True
+        except Exception as e:
+            print(f"Error creating user {user_id}: {e}", flush=True)
+            return False
+    
+    async def update_user_field(self, user_id: int, field: str, value: Any) -> bool:
+        """Update a specific field for user."""
+        if not self.pool:
+            return False
+        
+        allowed_fields = ['form', 'form_answer', 'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 'user_name']
+        if field not in allowed_fields:
+            return False
+        
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    f"UPDATE users SET {field} = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2",
+                    value, user_id
+                )
+                return True
+        except Exception as e:
+            print(f"Error updating user {user_id} field {field}: {e}", flush=True)
+            return False
+
+# Global database instance
+db = Database()
 
 # -----------------------------------------------------------------------------
 # VK API Helper
@@ -112,7 +268,8 @@ class VKAPI:
         user_id: int, 
         message: str, 
         keyboard: Optional[Dict] = None,
-        peer_id: Optional[int] = None
+        peer_id: Optional[int] = None,
+        attachment: Optional[str] = None
     ) -> Dict[str, Any]:
         params = {
             "message": message,
@@ -127,12 +284,139 @@ class VKAPI:
         if keyboard:
             params["keyboard"] = json.dumps(keyboard, ensure_ascii=False)
         
+        if attachment:
+            params["attachment"] = attachment
+        
         return await self.call("messages.send", params)
     
     async def get_user_info(self, user_id: int) -> Dict[str, Any]:
         """Get user info by ID."""
         params = {"user_ids": user_id}
         return await self.call("users.get", params)
+    
+    async def get_conversations(self, offset: int = 0, count: int = 200) -> Dict[str, Any]:
+        """Get conversations list with pagination."""
+        params = {
+            "offset": offset,
+            "count": count,
+            "filter": "all"
+        }
+        return await self.call("messages.getConversations", params)
+    
+    async def get_all_conversations(self) -> List[int]:
+        """Get all user IDs from conversations with pagination."""
+        all_user_ids = []
+        offset = 0
+        count = 200  # Max per request
+        
+        while True:
+            result = await self.get_conversations(offset=offset, count=count)
+            
+            if "error" in result:
+                print(f"Error getting conversations: {result['error']}", flush=True)
+                break
+            
+            if "response" not in result:
+                print(f"No response in conversations result: {result}", flush=True)
+                break
+            
+            items = result["response"].get("items", [])
+            if not items:
+                break
+            
+            for item in items:
+                conversation = item.get("conversation", {})
+                peer = conversation.get("peer", {})
+                peer_type = peer.get("type", "")
+                peer_id = peer.get("id", 0)
+                
+                # Only user conversations (not groups, not chats)
+                if peer_type == "user" and peer_id > 0:
+                    all_user_ids.append(peer_id)
+            
+            total_count = result["response"].get("count", 0)
+            offset += count
+            
+            print(f"Fetched {len(all_user_ids)} conversations, total available: {total_count}", flush=True)
+            
+            # Check if we got all
+            if offset >= total_count:
+                break
+        
+        return all_user_ids
+    
+    async def get_upload_server(self, peer_id: int) -> Optional[str]:
+        """Get upload server URL for documents."""
+        result = await self.call("docs.getMessagesUploadServer", {"peer_id": peer_id, "type": "doc"})
+        if "response" in result and "upload_url" in result["response"]:
+            return result["response"]["upload_url"]
+        print(f"Error getting upload server: {result}", flush=True)
+        return None
+    
+    async def upload_document(self, upload_url: str, file_data: bytes, filename: str) -> Optional[Dict]:
+        """Upload document to VK."""
+        if not self.session:
+            await self.init()
+        
+        try:
+            form = aiohttp.FormData()
+            form.add_field('file', file_data, filename=filename, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            
+            async with self.session.post(upload_url, data=form) as resp:
+                result = await resp.json()
+                return result
+        except Exception as e:
+            print(f"Error uploading document: {e}", flush=True)
+            return None
+    
+    async def save_document(self, file: str, title: str) -> Optional[Dict]:
+        """Save uploaded document."""
+        result = await self.call("docs.save", {"file": file, "title": title})
+        return result
+    
+    async def send_document(self, peer_id: int, file_data: bytes, filename: str, message: str = "") -> bool:
+        """Upload and send document to user."""
+        try:
+            # Get upload server
+            upload_url = await self.get_upload_server(peer_id)
+            if not upload_url:
+                return False
+            
+            # Upload file
+            upload_result = await self.upload_document(upload_url, file_data, filename)
+            if not upload_result or "file" not in upload_result:
+                print(f"Upload failed: {upload_result}", flush=True)
+                return False
+            
+            # Save document
+            save_result = await self.save_document(upload_result["file"], filename)
+            if not save_result or "response" not in save_result:
+                print(f"Save failed: {save_result}", flush=True)
+                return False
+            
+            # Get document attachment string
+            doc = save_result["response"].get("doc", save_result["response"].get("docs", [{}])[0] if "docs" in save_result["response"] else {})
+            if not doc:
+                print(f"No doc in response: {save_result}", flush=True)
+                return False
+            
+            owner_id = doc.get("owner_id", doc.get("doc", {}).get("owner_id", ""))
+            doc_id = doc.get("id", doc.get("doc", {}).get("id", ""))
+            attachment = f"doc{owner_id}_{doc_id}"
+            
+            # Send message with attachment
+            await self.send_message(
+                user_id=0,
+                message=message,
+                peer_id=peer_id,
+                attachment=attachment
+            )
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error sending document: {e}", flush=True)
+            return False
 
 
 # -----------------------------------------------------------------------------
@@ -153,20 +437,86 @@ def create_main_menu_keyboard() -> Dict:
         ]
     }
 
-def create_menu_keyboard() -> Dict:
-    """Menu with Testing button and Menu button always visible."""
+def create_menu_keyboard_with_form(is_admin: bool = False) -> Dict:
+    """Menu with Анкета button (for users who haven't completed form)."""
+    buttons = [
+        [
+            {
+                "action": {"type": "text", "label": "Меню"},
+                "color": "primary"
+            },
+            {
+                "action": {"type": "text", "label": "Анкета"},
+                "color": "positive"
+            }
+        ]
+    ]
+    
+    if is_admin:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "АДМИН"},
+                "color": "negative"
+            }
+        ])
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
+    }
+
+def create_menu_keyboard_with_test(is_admin: bool = False) -> Dict:
+    """Menu with Testing button (for users who completed form)."""
+    buttons = [
+        [
+            {
+                "action": {"type": "text", "label": "Меню"},
+                "color": "primary"
+            },
+            {
+                "action": {"type": "text", "label": "Тестирование"},
+                "color": "positive"
+            }
+        ]
+    ]
+    
+    if is_admin:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "АДМИН"},
+                "color": "negative"
+            }
+        ])
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
+    }
+
+def create_admin_keyboard() -> Dict:
+    """Admin panel keyboard with submenu."""
     return {
         "one_time": False,
         "inline": False,
         "buttons": [
             [
                 {
-                    "action": {"type": "text", "label": "Меню"},
-                    "color": "primary"
-                },
-                {
-                    "action": {"type": "text", "label": "Тестирование"},
+                    "action": {"type": "text", "label": "Скачать базу"},
                     "color": "positive"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Обновление базы"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
                 }
             ]
         ]
@@ -223,6 +573,21 @@ def create_retry_keyboard() -> Dict:
         ]
     }
 
+def create_form_keyboard() -> Dict:
+    """Keyboard with only Menu button for form questions."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
 
 # -----------------------------------------------------------------------------
 # Test Logic
@@ -262,6 +627,94 @@ def get_correct_answer_text(question: Dict) -> str:
 
 
 # -----------------------------------------------------------------------------
+# Database Export Helper
+# -----------------------------------------------------------------------------
+def create_users_xlsx(users: List[Dict]) -> bytes:
+    """Create XLSX file with users data."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Пользователи"
+    
+    # Define headers
+    headers = [
+        "ID пользователя",
+        "Имя",
+        "Анкета заполнена",
+        "Ответ анкеты",
+        "Тест 1",
+        "Тест 2",
+        "Тест 3",
+        "Тест 4",
+        "Дата создания",
+        "Дата обновления"
+    ]
+    
+    # Style for headers
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Write headers
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+    
+    # Write data
+    for row_num, user in enumerate(users, 2):
+        # Convert boolean values to Russian
+        def bool_ru(val):
+            return "Да" if val else "Нет"
+        
+        def format_datetime(dt):
+            if dt:
+                if isinstance(dt, str):
+                    return dt[:19] if len(dt) > 19 else dt
+                return dt.strftime("%Y-%m-%d %H:%M:%S")
+            return ""
+        
+        row_data = [
+            user.get("user_id", ""),
+            user.get("user_name", ""),
+            bool_ru(user.get("form", False)),
+            user.get("form_answer", ""),
+            bool_ru(user.get("test_book_1", False)),
+            bool_ru(user.get("test_book_2", False)),
+            bool_ru(user.get("test_book_3", False)),
+            bool_ru(user.get("test_book_4", False)),
+            format_datetime(user.get("created_at", "")),
+            format_datetime(user.get("updated_at", ""))
+        ]
+        
+        for col, value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col, value=value)
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+    
+    # Adjust column widths
+    column_widths = [15, 25, 18, 40, 10, 10, 10, 10, 20, 20]
+    for col, width in enumerate(column_widths, 1):
+        ws.column_dimensions[chr(64 + col) if col <= 26 else f"A{chr(64 + col - 26)}"].width = width
+    
+    # Freeze first row
+    ws.freeze_panes = "A2"
+    
+    # Save to bytes
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
+
+
+# -----------------------------------------------------------------------------
 # Web Server
 # -----------------------------------------------------------------------------
 class WebServer:
@@ -285,8 +738,11 @@ class WebServer:
             "token_configured": bool(TOKEN),
             "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
             "check_test_ids": CHECK_TEST_IDS,
+            "user_admin_id": USER_ADMIN_ID,
             "tests_loaded": bool(TESTS_DATA),
-            "texts_loaded": bool(TEXTS_DATA)
+            "texts_loaded": bool(TEXTS_DATA),
+            "form_loaded": bool(FORM_DATA),
+            "database_connected": db.pool is not None
         })
 
     async def vk_webhook(self, request: web.Request) -> web.Response:
@@ -338,37 +794,165 @@ class WebServer:
             
             print(f"User {user_id}: {text}", flush=True)
             
+            # Check if user is admin
+            is_admin = (user_id == USER_ADMIN_ID)
+            
             # Handle "Start" button
             if text.lower() in ["начать", "start", "/start"]:
-                # Clear any existing session
+                # Clear any existing sessions
                 if user_id in USER_SESSIONS:
                     del USER_SESSIONS[user_id]
+                if user_id in FORM_SESSIONS:
+                    del FORM_SESSIONS[user_id]
+                
+                # Get user name from VK
+                user_name = f"ID{user_id}"
+                try:
+                    user_info = await self.vk_api.get_user_info(user_id)
+                    if "response" in user_info and user_info["response"]:
+                        first_name = user_info["response"][0].get("first_name", "")
+                        last_name = user_info["response"][0].get("last_name", "")
+                        user_name = f"{first_name} {last_name}"
+                except Exception as e:
+                    print(f"Error getting user info: {e}", flush=True)
+                
+                # Check/create user in database
+                user_data = await db.get_user(user_id)
+                if not user_data:
+                    # Create new user
+                    await db.create_user(user_id, user_name)
+                    user_data = await db.get_user(user_id)
+                
+                # Check FORM status
+                form_completed = user_data.get("form", False) if user_data else False
                 
                 await self.vk_api.send_message(
                     user_id=user_id,
                     message="Добро пожаловать!\n\nБот не реагирует на текстовые сообщения. Используйте кнопки клавиатуры.",
                     peer_id=peer_id,
-                    keyboard=create_main_menu_keyboard()
+                    keyboard=create_menu_keyboard_with_form(is_admin) if not form_completed else create_menu_keyboard_with_test(is_admin)
                 )
                 return
             
-            # Handle "Меню" button - always available, cancels any ongoing test
+            # Handle "Меню" button - always available
             if text.lower() == "меню":
-                # Clear session if user is in the middle of a test
+                # Clear test session if user is in the middle of a test
                 if user_id in USER_SESSIONS:
                     del USER_SESSIONS[user_id]
-                    print(f"Session cleared for user {user_id} - returned to menu", flush=True)
+                    print(f"Test session cleared for user {user_id} - returned to menu", flush=True)
+                
+                # Clear form session if user is in the middle of form
+                if user_id in FORM_SESSIONS:
+                    del FORM_SESSIONS[user_id]
+                    print(f"Form session cleared for user {user_id} - returned to menu", flush=True)
+                
+                # Check/create user by ID
+                user_data = await db.get_user(user_id)
+                if not user_data:
+                    # Get user name from VK for new user
+                    user_name = f"ID{user_id}"
+                    try:
+                        user_info = await self.vk_api.get_user_info(user_id)
+                        if "response" in user_info and user_info["response"]:
+                            first_name = user_info["response"][0].get("first_name", "")
+                            last_name = user_info["response"][0].get("last_name", "")
+                            user_name = f"{first_name} {last_name}"
+                    except Exception as e:
+                        print(f"Error getting user info: {e}", flush=True)
+                    
+                    # Create new user
+                    await db.create_user(user_id, user_name)
+                    print(f"New user {user_id} ({user_name}) created via Menu button", flush=True)
+                    user_data = await db.get_user(user_id)
+                
+                # Get FORM status from user data
+                form_completed = user_data.get("form", False) if user_data else False
                 
                 await self.vk_api.send_message(
                     user_id=user_id,
                     message="Выберите действие:",
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard()
+                    keyboard=create_menu_keyboard_with_form(is_admin) if not form_completed else create_menu_keyboard_with_test(is_admin)
                 )
+                return
+            
+            # Handle "АДМИН" button - only for USER_ADMIN (show admin menu)
+            if text.lower() == "админ" and is_admin:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="🔧 Админ-панель:\n\nВыберите действие:",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                return
+            
+            # Handle "Скачать базу" button
+            if text.lower() == "скачать базу" and is_admin:
+                await self._handle_download_db(user_id, peer_id)
+                return
+            
+            # Handle "Обновление базы" button
+            if text.lower() == "обновление базы" and is_admin:
+                await self._handle_sync_users(user_id, peer_id)
+                return
+            
+            # Handle "Анкета" button
+            if text.lower() == "анкета":
+                # Check if user already completed form
+                user_data = await db.get_user(user_id)
+                form_completed = user_data.get("form", False) if user_data else False
+                
+                if form_completed:
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message="Вы уже заполнили анкету!",
+                        peer_id=peer_id,
+                        keyboard=create_menu_keyboard_with_test(is_admin)
+                    )
+                    return
+                
+                # Send warning message
+                warning_text = TEXTS_DATA.get("form_warning", "Если оборвать прохождение анкетирования, данные не сохранятся.")
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message=warning_text,
+                    peer_id=peer_id,
+                    keyboard=create_form_keyboard()
+                )
+                
+                # Start form session
+                FORM_SESSIONS[user_id] = {
+                    "question": 0,
+                    "answers": []
+                }
+                
+                # Send start message
+                start_text = TEXTS_DATA.get("form_start", "Начинаем заполнение анкеты.")
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message=start_text,
+                    peer_id=peer_id
+                )
+                
+                # Send first question
+                await self._send_form_question(user_id, peer_id)
                 return
             
             # Handle "Тестирование" button
             if text.lower() == "тестирование":
+                # Check if user completed form
+                user_data = await db.get_user(user_id)
+                form_completed = user_data.get("form", False) if user_data else False
+                
+                if not form_completed:
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message="Сначала необходимо заполнить анкету!",
+                        peer_id=peer_id,
+                        keyboard=create_menu_keyboard_with_form(is_admin)
+                    )
+                    return
+                
                 await self._start_test(user_id, peer_id)
                 return
             
@@ -383,11 +967,145 @@ class WebServer:
                 await self._handle_answer(user_id, peer_id, int(text))
                 return
             
+            # Handle form answer (if user is in form session)
+            if user_id in FORM_SESSIONS:
+                await self._handle_form_answer(user_id, peer_id, text)
+                return
+            
             # Ignore all other text
             print(f"Ignoring text message from user {user_id}: {text}", flush=True)
             
         except Exception as e:
             print(f"Message handling error: {e}", flush=True)
+
+    async def _handle_download_db(self, user_id: int, peer_id: int) -> None:
+        """Handle 'Скачать базу' button - export database to xlsx."""
+        print(f"Download DB button pressed by user {user_id}", flush=True)
+        
+        try:
+            # Get all users from database
+            users = await db.get_all_users()
+            
+            if not users:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="База данных пуста.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                return
+            
+            # Create XLSX file
+            xlsx_data = create_users_xlsx(users)
+            
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"users_{timestamp}.xlsx"
+            
+            # Send document
+            success = await self.vk_api.send_document(
+                peer_id=peer_id,
+                file_data=xlsx_data,
+                filename=filename,
+                message=f"📊 База данных: {len(users)} пользователей"
+            )
+            
+            if not success:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="Ошибка при отправке файла.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+            
+        except Exception as e:
+            print(f"Error handling download DB: {e}", flush=True)
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=f"Ошибка: {e}",
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
+
+    async def _handle_sync_users(self, user_id: int, peer_id: int) -> None:
+        """Handle 'Обновление базы' button - sync all VK conversations to database."""
+        print(f"Sync users button pressed by user {user_id}", flush=True)
+        
+        try:
+            # Notify admin that sync started
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message="🔄 Начинаю синхронизацию пользователей из чатов...",
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
+            
+            # Get all conversations
+            all_user_ids = await self.vk_api.get_all_conversations()
+            
+            if not all_user_ids:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="Чаты не найдены.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                return
+            
+            print(f"Found {len(all_user_ids)} user conversations", flush=True)
+            
+            # Get existing users from database
+            existing_users = await db.get_all_users()
+            existing_ids = set(u.get("user_id") for u in existing_users) if existing_users else set()
+            
+            # Find new users
+            new_user_ids = [uid for uid in all_user_ids if uid not in existing_ids]
+            
+            if not new_user_ids:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message=f"✅ Синхронизация завершена.\n\nВсего чатов: {len(all_user_ids)}\nНовых пользователей: 0\nВсе уже есть в базе.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                return
+            
+            # Create new users
+            created_count = 0
+            for new_user_id in new_user_ids:
+                # Get user name from VK
+                user_name = f"ID{new_user_id}"
+                try:
+                    user_info = await self.vk_api.get_user_info(new_user_id)
+                    if "response" in user_info and user_info["response"]:
+                        first_name = user_info["response"][0].get("first_name", "")
+                        last_name = user_info["response"][0].get("last_name", "")
+                        user_name = f"{first_name} {last_name}"
+                except Exception as e:
+                    print(f"Error getting user info for {new_user_id}: {e}", flush=True)
+                
+                # Create user in database
+                success = await db.create_user(new_user_id, user_name)
+                if success:
+                    created_count += 1
+                    print(f"Created user {new_user_id} ({user_name})", flush=True)
+            
+            # Send result
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=f"✅ Синхронизация завершена.\n\nВсего чатов: {len(all_user_ids)}\nУже в базе: {len(existing_ids)}\nДобавлено новых: {created_count}",
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
+            
+        except Exception as e:
+            print(f"Error handling sync users: {e}", flush=True)
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=f"❌ Ошибка синхронизации: {e}",
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
 
     async def _start_test(self, user_id: int, peer_id: int) -> None:
         """Start new test for user."""
@@ -507,6 +1225,9 @@ class WebServer:
         passing_score = TESTS_DATA.get("test_info", {}).get("passing_score", 18)
         passed = score >= passing_score
         
+        # Check if user is admin
+        is_admin = (user_id == USER_ADMIN_ID)
+        
         # Get user name for admin notification
         user_name = f"ID{user_id}"
         try:
@@ -534,6 +1255,10 @@ class WebServer:
                 except Exception as e:
                     print(f"Failed to send admin notification to {admin_id}: {e}", flush=True)
         
+        # Get user form status for correct keyboard
+        user_data = await db.get_user(user_id)
+        form_completed = user_data.get("form", False) if user_data else False
+        
         # Send result to user
         if passed:
             passed_text = TEXTS_DATA.get("test_passed", "🎉 Поздравляем! Вы сдали тест!")
@@ -542,7 +1267,7 @@ class WebServer:
                 user_id=user_id,
                 message=message,
                 peer_id=peer_id,
-                keyboard=create_main_menu_keyboard()
+                keyboard=create_menu_keyboard_with_test(is_admin)
             )
         else:
             failed_text = TEXTS_DATA.get("test_failed", "К сожалению, вы не набрали нужное количество баллов.")
@@ -557,17 +1282,151 @@ class WebServer:
         # Clear session
         del USER_SESSIONS[user_id]
 
+    async def _send_form_question(self, user_id: int, peer_id: int) -> None:
+        """Send current form question to user."""
+        session = FORM_SESSIONS.get(user_id)
+        if not session:
+            print(f"No form session for user {user_id}", flush=True)
+            return
+        
+        questions = FORM_DATA.get("questions", [])
+        question_idx = session["question"]
+        
+        if question_idx >= len(questions):
+            print(f"Question index out of range: {question_idx}", flush=True)
+            return
+        
+        question = questions[question_idx]
+        total = len(questions)
+        
+        # Format question message
+        prefix_template = TEXTS_DATA.get("form_question_prefix", "Вопрос {current}/{total}:")
+        prefix = prefix_template.format(current=question_idx + 1, total=total)
+        message = f"{prefix}\n\n{question['question']}"
+        
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=message,
+            peer_id=peer_id,
+            keyboard=create_form_keyboard()
+        )
+
+    async def _handle_form_answer(self, user_id: int, peer_id: int, answer: str) -> None:
+        """Handle user's answer to form question."""
+        session = FORM_SESSIONS.get(user_id)
+        if not session:
+            print(f"No form session for user {user_id}", flush=True)
+            return
+        
+        # Save answer
+        session["answers"].append(answer)
+        
+        # Move to next question
+        session["question"] += 1
+        
+        questions = FORM_DATA.get("questions", [])
+        
+        # Check if form is complete
+        if session["question"] >= len(questions):
+            await self._finish_form(user_id, peer_id)
+        else:
+            await self._send_form_question(user_id, peer_id)
+
+    async def _finish_form(self, user_id: int, peer_id: int) -> None:
+        """Finish form and save results."""
+        session = FORM_SESSIONS.get(user_id)
+        if not session:
+            return
+        
+        answers = session["answers"]
+        questions = FORM_DATA.get("questions", [])
+        
+        # Get user name from first answer (trimmed)
+        user_name = answers[0].strip() if answers else f"ID{user_id}"
+        
+        # Format form answers as readable text
+        form_answer_lines = []
+        for i, (q, a) in enumerate(zip(questions, answers), 1):
+            form_answer_lines.append(f"Вопрос {i}: {q['question']}")
+            form_answer_lines.append(f"Ответ {i}: {a}")
+            if i < len(questions):
+                form_answer_lines.append("")  # Empty line between Q&A
+        form_answer = "\n".join(form_answer_lines)
+        
+        # Update user in database: name, answers, form completed
+        await db.update_user_field(user_id, "user_name", user_name)
+        await db.update_user_field(user_id, "form_answer", form_answer)
+        await db.update_user_field(user_id, "form", True)
+        
+        print(f"Form completed for user {user_id}, name: {user_name}", flush=True)
+        
+        # Check if user is admin
+        is_admin = (user_id == USER_ADMIN_ID)
+        
+        # Send completion message
+        completed_text = TEXTS_DATA.get("form_completed", "✅ Анкета успешно заполнена!")
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=completed_text,
+            peer_id=peer_id,
+            keyboard=create_menu_keyboard_with_test(is_admin)
+        )
+        
+        # Send instructions
+        instructions_text = TEXTS_DATA.get("instructions", "Инструкция")
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=instructions_text,
+            peer_id=peer_id,
+            keyboard=create_menu_keyboard_with_test(is_admin)
+        )
+        
+        # Notify admin about form completion with full answers
+        if USER_ADMIN_ID:
+            # Create clickable link to user profile
+            user_link = f"[id{user_id}|{user_name}]"
+            admin_message = f"Пользователь {user_link}, прошел анкетирование!\n\n{form_answer}"
+            
+            try:
+                await self.vk_api.send_message(
+                    user_id=USER_ADMIN_ID,
+                    message=admin_message
+                )
+                print(f"Admin notification sent about form completion by user {user_id}", flush=True)
+            except Exception as e:
+                print(f"Failed to send admin notification: {e}", flush=True)
+        
+        # Clear form session
+        del FORM_SESSIONS[user_id]
+
 
 # -----------------------------------------------------------------------------
 # Entrypoint
 # -----------------------------------------------------------------------------
-def main_sync():
+async def async_main():
+    """Async main entrypoint."""
     print("Creating web server...", flush=True)
     server = WebServer()
     
-    print(f"Starting on port {PORT}...", flush=True)
-    web.run_app(server.app, host="0.0.0.0", port=PORT, print=lambda x: print(x, flush=True))
+    # Initialize database
+    await db.init()
+    
+    runner = web.AppRunner(server.app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    
+    print(f"Server started on port {PORT}", flush=True)
+    
+    try:
+        await asyncio.Event().wait()
+    except KeyboardInterrupt:
+        print("Shutting down...", flush=True)
+    finally:
+        await db.close()
+        await runner.cleanup()
+        print("Application shutdown complete", flush=True)
 
 
 if __name__ == "__main__":
-    main_sync()
+    asyncio.run(async_main())
