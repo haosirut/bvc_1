@@ -141,6 +141,10 @@ class Database:
                         test_book_2 BOOLEAN DEFAULT FALSE,
                         test_book_3 BOOLEAN DEFAULT FALSE,
                         test_book_4 BOOLEAN DEFAULT FALSE,
+                        practice_1 BOOLEAN DEFAULT FALSE,
+                        practice_2 BOOLEAN DEFAULT FALSE,
+                        practice_3 BOOLEAN DEFAULT FALSE,
+                        practice_4 BOOLEAN DEFAULT FALSE,
                         course_1 BOOLEAN DEFAULT FALSE,
                         course_2 BOOLEAN DEFAULT FALSE,
                         course_3 BOOLEAN DEFAULT FALSE,
@@ -162,6 +166,10 @@ class Database:
             # Add new columns if they don't exist (for existing tables)
             async with self.pool.acquire() as conn:
                 new_columns = [
+                    ("practice_1", "BOOLEAN DEFAULT FALSE"),
+                    ("practice_2", "BOOLEAN DEFAULT FALSE"),
+                    ("practice_3", "BOOLEAN DEFAULT FALSE"),
+                    ("practice_4", "BOOLEAN DEFAULT FALSE"),
                     ("course_1", "BOOLEAN DEFAULT FALSE"),
                     ("course_2", "BOOLEAN DEFAULT FALSE"),
                     ("course_3", "BOOLEAN DEFAULT FALSE"),
@@ -251,6 +259,7 @@ class Database:
         
         allowed_fields = [
             'form', 'form_answer', 'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 'user_name',
+            'practice_1', 'practice_2', 'practice_3', 'practice_4',
             'course_1', 'course_2', 'course_3', 'course_4',
             'access_survey_1', 'access_survey_2', 'access_survey_3', 'access_survey_4',
             'fortune_wheel_1', 'fortune_wheel_2', 'fortune_wheel_3', 'fortune_wheel_4'
@@ -1297,11 +1306,29 @@ class WebServer:
                 # Handle course selection (1-4) when selecting user
                 if session["step"] == "select_course" and text in ["1", "2", "3", "4"]:
                     session["selected_course"] = int(text)
-                    session["step"] = "confirm_action"
                     
                     # Get selected user info
                     selected_user = await db.get_user(session["selected_user_id"])
                     user_name = selected_user.get("user_name", "Unknown") if selected_user else "Unknown"
+                    
+                    # Check if practice is completed for this course
+                    practice_field = f"practice_{text}"
+                    practice_completed = selected_user.get(practice_field, False) if selected_user else False
+                    
+                    if not practice_completed:
+                        # Block access: practice not completed
+                        session["step"] = "confirm_action"
+                        msg_template = TEXTS_DATA.get("admin_practice_not_completed", "❌ Нельзя открыть доступ к финальной анкете!\n\nПользователь: {user_name}\nКурс: {course}\n\nПричина: Практика не сдана (Практика {course} = Нет)")
+                        await self.vk_api.send_message(
+                            user_id=user_id,
+                            message=msg_template.format(user_name=user_name, course=text),
+                            peer_id=peer_id,
+                            keyboard=create_admin_keyboard()
+                        )
+                        del ADMIN_SEARCH_SESSIONS[user_id]
+                        return
+                    
+                    session["step"] = "confirm_action"
                     
                     msg_template = TEXTS_DATA.get("admin_access_action", "Выберите действие с доступом к финальной анкете после прохождения курса {course}:\n\nПользователь: {user_name}")
                     await self.vk_api.send_message(
@@ -1419,6 +1446,10 @@ class WebServer:
                         user_name = f"{first_name} {last_name}"
                 except Exception as e:
                     print(f"Error getting user info: {e}", flush=True)
+                
+                # Update practice_1 in database
+                await db.update_user_field(user_id, "practice_1", True)
+                print(f"Practice 1 marked as completed for user {user_id}", flush=True)
                 
                 # Notify all CHECK_TEST admins
                 if CHECK_TEST_IDS:
