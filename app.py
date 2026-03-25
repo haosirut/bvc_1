@@ -716,7 +716,65 @@ def create_menu_keyboard_with_final_survey(is_admin: bool = False) -> Dict:
                 "color": "primary"
             },
             {
-                "action": {"type": "text", "label": "Тестирование"},
+                "action": {"type": "text", "label": "Финальное анкетирование"},
+                "color": "positive"
+            }
+        ]
+    ]
+    
+    if is_admin:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "АДМИН"},
+                "color": "negative"
+            }
+        ])
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
+    }
+
+def create_menu_keyboard_after_test_passed(is_admin: bool = False) -> Dict:
+    """Menu for users who passed test but haven't done practice yet."""
+    buttons = [
+        [
+            {
+                "action": {"type": "text", "label": "Меню"},
+                "color": "primary"
+            },
+            {
+                "action": {"type": "text", "label": "Сдал(а) практику"},
+                "color": "positive"
+            }
+        ]
+    ]
+    
+    if is_admin:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "АДМИН"},
+                "color": "negative"
+            }
+        ])
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
+    }
+
+def create_menu_keyboard_with_practice_and_survey(is_admin: bool = False) -> Dict:
+    """Menu for users who passed test and have access to final survey (also show practice button)."""
+    buttons = [
+        [
+            {
+                "action": {"type": "text", "label": "Меню"},
+                "color": "primary"
+            },
+            {
+                "action": {"type": "text", "label": "Сдал(а) практику"},
                 "color": "positive"
             }
         ],
@@ -1045,8 +1103,9 @@ class WebServer:
                     await db.create_user(user_id, user_name)
                     user_data = await db.get_user(user_id)
                 
-                # Check FORM status and access to final survey
+                # Check FORM status, test status, and access to final survey
                 form_completed = user_data.get("form", False) if user_data else False
+                test_passed = user_data.get("test_book_1", False) if user_data else False
                 has_final_survey_access = any([
                     user_data.get("access_survey_1", False),
                     user_data.get("access_survey_2", False),
@@ -1055,8 +1114,10 @@ class WebServer:
                 ]) if user_data else False
                 
                 # Choose appropriate keyboard
-                if has_final_survey_access:
-                    keyboard = create_menu_keyboard_with_final_survey(is_admin)
+                if has_final_survey_access and test_passed:
+                    keyboard = create_menu_keyboard_with_practice_and_survey(is_admin)
+                elif test_passed:
+                    keyboard = create_menu_keyboard_after_test_passed(is_admin)
                 elif form_completed:
                     keyboard = create_menu_keyboard_with_test(is_admin)
                 else:
@@ -1106,8 +1167,9 @@ class WebServer:
                     print(f"New user {user_id} ({user_name}) created via Menu button", flush=True)
                     user_data = await db.get_user(user_id)
                 
-                # Get FORM status and access to final survey
+                # Get FORM status, test status, and access to final survey
                 form_completed = user_data.get("form", False) if user_data else False
+                test_passed = user_data.get("test_book_1", False) if user_data else False
                 has_final_survey_access = any([
                     user_data.get("access_survey_1", False),
                     user_data.get("access_survey_2", False),
@@ -1116,8 +1178,10 @@ class WebServer:
                 ]) if user_data else False
                 
                 # Choose appropriate keyboard
-                if has_final_survey_access:
-                    keyboard = create_menu_keyboard_with_final_survey(is_admin)
+                if has_final_survey_access and test_passed:
+                    keyboard = create_menu_keyboard_with_practice_and_survey(is_admin)
+                elif test_passed:
+                    keyboard = create_menu_keyboard_after_test_passed(is_admin)
                 elif form_completed:
                     keyboard = create_menu_keyboard_with_test(is_admin)
                 else:
@@ -1334,6 +1398,42 @@ class WebServer:
                     message="Тут будет анкетирование после прохождения курса",
                     peer_id=peer_id,
                     keyboard=create_menu_keyboard_with_final_survey(is_admin)
+                )
+                return
+            
+            # Handle "Сдал(а) практику" button
+            if text.lower() == "сдал(а) практику" or text.lower() == "сдала практику" or text.lower() == "сдал практику":
+                # Get user info for notification
+                user_name = f"ID{user_id}"
+                try:
+                    user_info = await self.vk_api.get_user_info(user_id)
+                    if "response" in user_info and user_info["response"]:
+                        first_name = user_info["response"][0].get("first_name", "")
+                        last_name = user_info["response"][0].get("last_name", "")
+                        user_name = f"{first_name} {last_name}"
+                except Exception as e:
+                    print(f"Error getting user info: {e}", flush=True)
+                
+                # Notify all CHECK_TEST admins
+                if CHECK_TEST_IDS:
+                    user_link = f"[id{user_id}|{user_name}]"
+                    admin_message = f"Пользователь {user_link} сдал(а) Практику в Курс 1 - используйте меню, чтобы открыть ему доступ к финальному анкетированию"
+                    for admin_id in CHECK_TEST_IDS:
+                        try:
+                            await self.vk_api.send_message(
+                                user_id=admin_id,
+                                message=admin_message
+                            )
+                            print(f"Practice notification sent to admin {admin_id}", flush=True)
+                        except Exception as e:
+                            print(f"Failed to send practice notification to {admin_id}: {e}", flush=True)
+                
+                # Confirm to user
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="✅ Уведомление о сдаче практики отправлено менеджеру.\n\nОжидайте, вам откроют доступ к финальному анкетированию.",
+                    peer_id=peer_id,
+                    keyboard=create_menu_keyboard_after_test_passed(is_admin)
                 )
                 return
             
@@ -1699,16 +1799,33 @@ class WebServer:
         # Get user form status for correct keyboard
         user_data = await db.get_user(user_id)
         form_completed = user_data.get("form", False) if user_data else False
+        has_final_survey_access = any([
+            user_data.get("access_survey_1", False),
+            user_data.get("access_survey_2", False),
+            user_data.get("access_survey_3", False),
+            user_data.get("access_survey_4", False)
+        ]) if user_data else False
         
         # Send result to user
         if passed:
+            # Update test_book_1 in database
+            await db.update_user_field(user_id, "test_book_1", True)
+            
             passed_text = TEXTS_DATA.get("test_passed", "🎉 Поздравляем! Вы сдали тест!")
-            message = f"{passed_text}\n\nВаш результат: {score}/{total}"
+            practice_info = "\n\nЕсли вы сдали практику - используйте кнопки Меню для уведомления менеджера. Он откроет вам доступ к финальному анкетированию и получению диплома о прохождении курса."
+            message = f"{passed_text}\n\nВаш результат: {score}/{total}{practice_info}"
+            
+            # Use keyboard with practice button
+            if has_final_survey_access:
+                keyboard = create_menu_keyboard_with_practice_and_survey(is_admin)
+            else:
+                keyboard = create_menu_keyboard_after_test_passed(is_admin)
+            
             await self.vk_api.send_message(
                 user_id=user_id,
                 message=message,
                 peer_id=peer_id,
-                keyboard=create_menu_keyboard_with_test(is_admin)
+                keyboard=keyboard
             )
         else:
             failed_text = TEXTS_DATA.get("test_failed", "К сожалению, вы не набрали нужное количество баллов.")
