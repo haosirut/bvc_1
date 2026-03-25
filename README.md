@@ -148,6 +148,26 @@ bvc_1/
 
 ## Правила написания кода
 
+### ⚠️ ВАЖНОЕ ПРАВИЛО: Тексты сообщений
+
+**Все текстовые сообщения, отправляемые пользователю, ДОЛЖНЫ храниться в файле `texts.json`.**
+
+- Запрещено хардкодить тексты сообщений в коде (`app.py`)
+- Все сообщения получаются через `TEXTS_DATA.get("key", "default")`
+- Для подстановки переменных использовать шаблоны с `{variable}`
+- При добавлении нового сообщения: сначала добавить в `texts.json`, потом использовать в коде
+
+Пример:
+```python
+# ❌ Неправильно:
+message = f"Пользователь {user_name} сдал тест!"
+
+# ✅ Правильно:
+# В texts.json: "test_passed_notification": "Пользователь {user_name} сдал тест!"
+msg_template = TEXTS_DATA.get("test_passed_notification", "Пользователь {user_name} сдал тест!")
+message = msg_template.format(user_name=user_name)
+```
+
 ### Архитектура
 - **Webhook**: Бот работает через VK Callback API (не long polling)
 - **Async**: Весь код асинхронный (asyncio, aiohttp, asyncpg)

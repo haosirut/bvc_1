@@ -1125,7 +1125,7 @@ class WebServer:
                 
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="Добро пожаловать!\n\nБот не реагирует на текстовые сообщения. Используйте кнопки клавиатуры.",
+                    message=TEXTS_DATA.get("welcome_message", "Добро пожаловать! Используйте кнопки клавиатуры."),
                     peer_id=peer_id,
                     keyboard=keyboard
                 )
@@ -1189,7 +1189,7 @@ class WebServer:
                 
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="Выберите действие:",
+                    message=TEXTS_DATA.get("menu_select_action", "Выберите действие:"),
                     peer_id=peer_id,
                     keyboard=keyboard
                 )
@@ -1199,7 +1199,7 @@ class WebServer:
             if text.lower() == "админ" and is_admin:
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="🔧 Админ-панель:\n\nВыберите действие:",
+                    message=TEXTS_DATA.get("admin_panel_title", "🔧 Админ-панель:\n\nВыберите действие:"),
                     peer_id=peer_id,
                     keyboard=create_admin_keyboard()
                 )
@@ -1223,7 +1223,7 @@ class WebServer:
                 
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="🔍 Поиск пользователя:\n\nВведите имя или часть имени для поиска:",
+                    message=TEXTS_DATA.get("admin_search_prompt", "🔍 Поиск пользователя:\n\nВведите имя или часть имени для поиска:"),
                     peer_id=peer_id,
                     keyboard=create_main_menu_keyboard()
                 )
@@ -1267,7 +1267,7 @@ class WebServer:
                     }
                     await self.vk_api.send_message(
                         user_id=user_id,
-                        message="🔍 Введите имя или часть имени для поиска:",
+                        message=TEXTS_DATA.get("admin_search_prompt_retry", "🔍 Введите имя или часть имени для поиска:"),
                         peer_id=peer_id,
                         keyboard=create_main_menu_keyboard()
                     )
@@ -1285,9 +1285,10 @@ class WebServer:
                             break
                     
                     if session["selected_user_id"]:
+                        msg_template = TEXTS_DATA.get("admin_select_course", "Выберите курс для пользователя:\n{user_name}")
                         await self.vk_api.send_message(
                             user_id=user_id,
-                            message=f"Выберите курс для пользователя:\n{selected_name}",
+                            message=msg_template.format(user_name=selected_name),
                             peer_id=peer_id,
                             keyboard=create_course_selection_keyboard()
                         )
@@ -1302,9 +1303,10 @@ class WebServer:
                     selected_user = await db.get_user(session["selected_user_id"])
                     user_name = selected_user.get("user_name", "Unknown") if selected_user else "Unknown"
                     
+                    msg_template = TEXTS_DATA.get("admin_access_action", "Выберите действие с доступом к финальной анкете после прохождения курса {course}:\n\nПользователь: {user_name}")
                     await self.vk_api.send_message(
                         user_id=user_id,
-                        message=f"Выберите действие с доступом к финальной анкете после прохождения курса {text}:\n\nПользователь: {user_name}",
+                        message=msg_template.format(course=text, user_name=user_name),
                         peer_id=peer_id,
                         keyboard=create_access_action_keyboard()
                     )
@@ -1324,18 +1326,20 @@ class WebServer:
                     user_name = target_user.get("user_name", "Unknown") if target_user else "Unknown"
                     
                     # Notify admin
+                    msg_template = TEXTS_DATA.get("admin_access_opened", "✅ Доступ к финальной анкете курса {course} ОТКРЫТ для:\n{user_name}")
                     await self.vk_api.send_message(
                         user_id=user_id,
-                        message=f"✅ Доступ к финальной анкете курса {course} ОТКРЫТ для:\n{user_name}",
+                        message=msg_template.format(course=course, user_name=user_name),
                         peer_id=peer_id,
                         keyboard=create_admin_keyboard()
                     )
                     
                     # Notify user
                     try:
+                        msg_template = TEXTS_DATA.get("user_access_opened", "Вам открыт доступ к прохождению анкетирования после прохождения курса {course} - используйте кнопки меню")
                         await self.vk_api.send_message(
                             user_id=target_user_id,
-                            message=f"Вам открыт доступ к прохождению анкетирования после прохождения курса {course} - используйте кнопки меню",
+                            message=msg_template.format(course=course),
                             peer_id=target_user_id
                         )
                     except Exception as e:
@@ -1358,9 +1362,10 @@ class WebServer:
                     user_name = target_user.get("user_name", "Unknown") if target_user else "Unknown"
                     
                     # Notify admin
+                    msg_template = TEXTS_DATA.get("admin_access_closed", "🔒 Доступ к финальной анкете курса {course} ЗАКРЫТ для:\n{user_name}")
                     await self.vk_api.send_message(
                         user_id=user_id,
-                        message=f"🔒 Доступ к финальной анкете курса {course} ЗАКРЫТ для:\n{user_name}",
+                        message=msg_template.format(course=course, user_name=user_name),
                         peer_id=peer_id,
                         keyboard=create_admin_keyboard()
                     )
@@ -1374,9 +1379,10 @@ class WebServer:
                     results = await db.search_users_by_name(text)
                     
                     if not results:
+                        msg_template = TEXTS_DATA.get("admin_search_not_found", "По запросу \"{query}\" ничего не найдено.\n\nПопробуйте другой поиск:")
                         await self.vk_api.send_message(
                             user_id=user_id,
-                            message=f"По запросу \"{text}\" ничего не найдено.\n\nПопробуйте другой поиск:",
+                            message=msg_template.format(query=text),
                             peer_id=peer_id,
                             keyboard=create_main_menu_keyboard()
                         )
@@ -1395,7 +1401,7 @@ class WebServer:
                 # Stub for now
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="Тут будет анкетирование после прохождения курса",
+                    message=TEXTS_DATA.get("final_survey_stub", "Тут будет анкетирование после прохождения курса"),
                     peer_id=peer_id,
                     keyboard=create_menu_keyboard_with_final_survey(is_admin)
                 )
@@ -1417,7 +1423,8 @@ class WebServer:
                 # Notify all CHECK_TEST admins
                 if CHECK_TEST_IDS:
                     user_link = f"[id{user_id}|{user_name}]"
-                    admin_message = f"Пользователь {user_link} сдал(а) Практику в Курс 1 - используйте меню, чтобы открыть ему доступ к финальному анкетированию"
+                    msg_template = TEXTS_DATA.get("practice_notification", "Пользователь {user_link} сдал(а) Практику в Курс 1 - используйте меню, чтобы открыть ему доступ к финальному анкетированию")
+                    admin_message = msg_template.format(user_link=user_link)
                     for admin_id in CHECK_TEST_IDS:
                         try:
                             await self.vk_api.send_message(
@@ -1431,7 +1438,7 @@ class WebServer:
                 # Confirm to user
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="✅ Уведомление о сдаче практики отправлено менеджеру.\n\nОжидайте, вам откроют доступ к финальному анкетированию.",
+                    message=TEXTS_DATA.get("practice_confirmed", "✅ Уведомление о сдаче практики отправлено менеджеру.\n\nОжидайте, вам откроют доступ к финальному анкетированию."),
                     peer_id=peer_id,
                     keyboard=create_menu_keyboard_after_test_passed(is_admin)
                 )
@@ -1446,7 +1453,7 @@ class WebServer:
                 if form_completed:
                     await self.vk_api.send_message(
                         user_id=user_id,
-                        message="Вы уже заполнили анкету!",
+                        message=TEXTS_DATA.get("form_already_completed", "Вы уже заполнили анкету!"),
                         peer_id=peer_id,
                         keyboard=create_menu_keyboard_with_test(is_admin)
                     )
@@ -1488,7 +1495,7 @@ class WebServer:
                 if not form_completed:
                     await self.vk_api.send_message(
                         user_id=user_id,
-                        message="Сначала необходимо заполнить анкету!",
+                        message=TEXTS_DATA.get("test_not_available", "Сначала необходимо заполнить анкету!"),
                         peer_id=peer_id,
                         keyboard=create_menu_keyboard_with_form(is_admin)
                     )
@@ -1530,7 +1537,7 @@ class WebServer:
             if not users:
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="База данных пуста.",
+                    message=TEXTS_DATA.get("db_empty", "База данных пуста."),
                     peer_id=peer_id,
                     keyboard=create_admin_keyboard()
                 )
@@ -1544,26 +1551,28 @@ class WebServer:
             filename = f"users_{timestamp}.xlsx"
             
             # Send document
+            msg_template = TEXTS_DATA.get("db_export_success", "📊 База данных: {count} пользователей")
             success = await self.vk_api.send_document(
                 peer_id=peer_id,
                 file_data=xlsx_data,
                 filename=filename,
-                message=f"📊 База данных: {len(users)} пользователей"
+                message=msg_template.format(count=len(users))
             )
             
             if not success:
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="Ошибка при отправке файла.",
+                    message=TEXTS_DATA.get("db_export_error", "Ошибка при отправке файла."),
                     peer_id=peer_id,
                     keyboard=create_admin_keyboard()
                 )
             
         except Exception as e:
             print(f"Error handling download DB: {e}", flush=True)
+            msg_template = TEXTS_DATA.get("db_export_error_detail", "Ошибка: {error}")
             await self.vk_api.send_message(
                 user_id=user_id,
-                message=f"Ошибка: {e}",
+                message=msg_template.format(error=e),
                 peer_id=peer_id,
                 keyboard=create_admin_keyboard()
             )
@@ -1576,7 +1585,7 @@ class WebServer:
             # Notify admin that sync started
             await self.vk_api.send_message(
                 user_id=user_id,
-                message="🔄 Начинаю синхронизацию пользователей из чатов...",
+                message=TEXTS_DATA.get("db_sync_start", "🔄 Начинаю синхронизацию пользователей из чатов..."),
                 peer_id=peer_id,
                 keyboard=create_admin_keyboard()
             )
@@ -1587,7 +1596,7 @@ class WebServer:
             if not all_user_ids:
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message="Чаты не найдены.",
+                    message=TEXTS_DATA.get("db_sync_no_chats", "Чаты не найдены."),
                     peer_id=peer_id,
                     keyboard=create_admin_keyboard()
                 )
@@ -1603,9 +1612,10 @@ class WebServer:
             new_user_ids = [uid for uid in all_user_ids if uid not in existing_ids]
             
             if not new_user_ids:
+                msg_template = TEXTS_DATA.get("db_sync_no_new", "✅ Синхронизация завершена.\n\nВсего чатов: {total}\nНовых пользователей: 0\nВсе уже есть в базе.")
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message=f"✅ Синхронизация завершена.\n\nВсего чатов: {len(all_user_ids)}\nНовых пользователей: 0\nВсе уже есть в базе.",
+                    message=msg_template.format(total=len(all_user_ids)),
                     peer_id=peer_id,
                     keyboard=create_admin_keyboard()
                 )
@@ -1632,18 +1642,20 @@ class WebServer:
                     print(f"Created user {new_user_id} ({user_name})", flush=True)
             
             # Send result
+            msg_template = TEXTS_DATA.get("db_sync_success", "✅ Синхронизация завершена.\n\nВсего чатов: {total}\nУже в базе: {existing}\nДобавлено новых: {created}")
             await self.vk_api.send_message(
                 user_id=user_id,
-                message=f"✅ Синхронизация завершена.\n\nВсего чатов: {len(all_user_ids)}\nУже в базе: {len(existing_ids)}\nДобавлено новых: {created_count}",
+                message=msg_template.format(total=len(all_user_ids), existing=len(existing_ids), created=created_count),
                 peer_id=peer_id,
                 keyboard=create_admin_keyboard()
             )
             
         except Exception as e:
             print(f"Error handling sync users: {e}", flush=True)
+            msg_template = TEXTS_DATA.get("db_sync_error", "❌ Ошибка синхронизации: {error}")
             await self.vk_api.send_message(
                 user_id=user_id,
-                message=f"❌ Ошибка синхронизации: {e}",
+                message=msg_template.format(error=e),
                 peer_id=peer_id,
                 keyboard=create_admin_keyboard()
             )
