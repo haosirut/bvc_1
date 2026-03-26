@@ -82,6 +82,7 @@ def load_json_file(filename: str) -> Dict:
 TESTS_DATA = load_json_file("tests.json")
 TEXTS_DATA = load_json_file("texts.json")
 FORM_DATA = load_json_file("form.json")
+FINAL_FORM_DATA = load_json_file("final_form_1.json")
 
 # -----------------------------------------------------------------------------
 # User Sessions Storage (in-memory)
@@ -101,6 +102,19 @@ FORM_SESSIONS: Dict[int, Dict] = {}
 # Steps: "search", "select_user", "select_course", "confirm_action"
 # -----------------------------------------------------------------------------
 ADMIN_SEARCH_SESSIONS: Dict[int, Dict] = {}
+
+# -----------------------------------------------------------------------------
+# Final Form Sessions (in-memory)
+# Format: {user_id: {"course": int, "step": str, "answers": Dict, "current_question": int/str, "need_case_update": bool}}
+# Steps: "question", "check_data", "update_name", "update_case", "finished"
+# -----------------------------------------------------------------------------
+FINAL_FORM_SESSIONS: Dict[int, Dict] = {}
+
+# -----------------------------------------------------------------------------
+# Fortune Wheel Sessions (in-memory)
+# Format: {user_id: {"course": int, "prize": str, "spin_available": bool}}
+# -----------------------------------------------------------------------------
+FORTUNE_WHEEL_SESSIONS: Dict[int, Dict] = {}
 
 # -----------------------------------------------------------------------------
 # Database Helper
@@ -182,6 +196,11 @@ class Database:
                     ("fortune_wheel_2", "BOOLEAN DEFAULT FALSE"),
                     ("fortune_wheel_3", "BOOLEAN DEFAULT FALSE"),
                     ("fortune_wheel_4", "BOOLEAN DEFAULT FALSE"),
+                    ("form_end_1", "TEXT DEFAULT ''"),
+                    ("form_end_2", "TEXT DEFAULT ''"),
+                    ("form_end_3", "TEXT DEFAULT ''"),
+                    ("form_end_4", "TEXT DEFAULT ''"),
+                    ("user_name_case", "TEXT DEFAULT ''"),
                 ]
                 for col_name, col_type in new_columns:
                     try:
@@ -262,7 +281,8 @@ class Database:
             'practice_1', 'practice_2', 'practice_3', 'practice_4',
             'course_1', 'course_2', 'course_3', 'course_4',
             'access_survey_1', 'access_survey_2', 'access_survey_3', 'access_survey_4',
-            'fortune_wheel_1', 'fortune_wheel_2', 'fortune_wheel_3', 'fortune_wheel_4'
+            'fortune_wheel_1', 'fortune_wheel_2', 'fortune_wheel_3', 'fortune_wheel_4',
+            'form_end_1', 'form_end_2', 'form_end_3', 'form_end_4', 'user_name_case'
         ]
         if field not in allowed_fields:
             return False
@@ -876,6 +896,211 @@ def create_form_keyboard() -> Dict:
     }
 
 
+def create_yes_no_keyboard() -> Dict:
+    """Keyboard with Да/Нет buttons for final form questions."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Да"},
+                    "color": "positive"
+                },
+                {
+                    "action": {"type": "text", "label": "Нет"},
+                    "color": "negative"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+
+def create_yes_no_unknown_keyboard() -> Dict:
+    """Keyboard with Да/Нет/Не знаю buttons for final form questions."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Да"},
+                    "color": "positive"
+                },
+                {
+                    "action": {"type": "text", "label": "Нет"},
+                    "color": "negative"
+                },
+                {
+                    "action": {"type": "text", "label": "Не знаю"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+
+def create_agree_disagree_keyboard() -> Dict:
+    """Keyboard with Не против/Против buttons for final form questions."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Не против"},
+                    "color": "positive"
+                },
+                {
+                    "action": {"type": "text", "label": "Против"},
+                    "color": "negative"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+
+def create_rating_keyboard(min_val: int = 1, max_val: int = 10) -> Dict:
+    """Keyboard with rating buttons 1-10 for final form questions."""
+    buttons = []
+    
+    # Create rows of 5 buttons each
+    row1 = []
+    row2 = []
+    for i in range(min_val, max_val + 1):
+        btn = {
+            "action": {"type": "text", "label": str(i)},
+            "color": "primary"
+        }
+        if i <= 5:
+            row1.append(btn)
+        else:
+            row2.append(btn)
+    
+    buttons.append(row1)
+    buttons.append(row2)
+    buttons.append([
+        {
+            "action": {"type": "text", "label": "Меню"},
+            "color": "secondary"
+        }
+    ])
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
+    }
+
+
+def create_check_data_keyboard() -> Dict:
+    """Keyboard for checking user data in final form."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Верно"},
+                    "color": "positive"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Исправить ФИ"},
+                    "color": "primary"
+                },
+                {
+                    "action": {"type": "text", "label": "Исправить ФИ и падеж"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+
+def create_fortune_wheel_keyboard() -> Dict:
+    """Keyboard for fortune wheel - spin or later."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Крутить"},
+                    "color": "positive"
+                },
+                {
+                    "action": {"type": "text", "label": "В другой раз"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+
+def create_spin_wheel_keyboard() -> Dict:
+    """Keyboard for spinning the wheel."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Испытать удачу"},
+                    "color": "positive"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+
+def create_final_form_open_keyboard() -> Dict:
+    """Keyboard for open questions in final form (text input)."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+
 # -----------------------------------------------------------------------------
 # Test Logic
 # -----------------------------------------------------------------------------
@@ -911,6 +1136,80 @@ def get_correct_answer_text(question: Dict) -> str:
         if answer.get("is_correct", False):
             return answer.get("text", "")
     return ""
+
+
+# -----------------------------------------------------------------------------
+# Final Form Logic
+# -----------------------------------------------------------------------------
+def get_final_form_question(question_id) -> Optional[Dict]:
+    """Get question from final form by ID (int or str)."""
+    questions = FINAL_FORM_DATA.get("questions", [])
+    for q in questions:
+        if str(q.get("id")) == str(question_id):
+            return q
+    return None
+
+
+def get_next_question_id(current_id, answer: str = None) -> Optional[Any]:
+    """Get next question ID based on current question and answer."""
+    question = get_final_form_question(current_id)
+    if not question:
+        return None
+    
+    # Check if there are branches based on answer
+    branches = question.get("branches", {})
+    if branches and answer:
+        # For rating questions, check if answer is max or not
+        if question.get("type") == "rating":
+            max_val = question.get("max", 10)
+            if answer == str(max_val):
+                branch = branches.get("max", {})
+            else:
+                branch = branches.get("not_max", {})
+            return branch.get("next_question")
+        
+        # For button questions, check exact match
+        branch = branches.get(answer, {})
+        if branch:
+            action = branch.get("action")
+            if action == "finish_form":
+                return "finish"
+            return branch.get("next_question")
+    
+    # Default next question
+    next_q = question.get("next_question")
+    if next_q == "finish_form":
+        return "finish"
+    return next_q
+
+
+def select_prize_by_probability(prizes: List[Dict]) -> str:
+    """Select a prize based on probability weights."""
+    total = sum(p.get("probability", 0) for p in prizes)
+    rand = random.randint(1, total)
+    cumulative = 0
+    for prize in prizes:
+        cumulative += prize.get("probability", 0)
+        if rand <= cumulative:
+            return prize.get("name", "Приз")
+    return prizes[-1].get("name", "Приз")
+
+
+def get_sorted_prizes_list() -> str:
+    """Get sorted prizes list for display (by probability, then alphabetically)."""
+    prizes = FINAL_FORM_DATA.get("fortune_wheel", {}).get("prizes", [])
+    # Sort by probability (ascending), then by name (alphabetically)
+    sorted_prizes = sorted(prizes, key=lambda p: (p.get("probability", 0), p.get("name", "")))
+    lines = []
+    for p in sorted_prizes:
+        lines.append(f"🎁 {p.get('name')} - вероятность {p.get('probability')}%")
+    return "\n".join(lines)
+
+
+def is_physical_prize(prize_name: str) -> bool:
+    """Check if prize is a physical item that needs to be picked up."""
+    physical_prizes = FINAL_FORM_DATA.get("fortune_wheel", {}).get("physical_prizes", [])
+    return prize_name in physical_prizes
 
 
 # -----------------------------------------------------------------------------
@@ -1029,6 +1328,7 @@ class WebServer:
             "tests_loaded": bool(TESTS_DATA),
             "texts_loaded": bool(TEXTS_DATA),
             "form_loaded": bool(FORM_DATA),
+            "final_form_loaded": bool(FINAL_FORM_DATA),
             "database_connected": db.pool is not None
         })
 
@@ -1093,6 +1393,10 @@ class WebServer:
                     del FORM_SESSIONS[user_id]
                 if user_id in ADMIN_SEARCH_SESSIONS:
                     del ADMIN_SEARCH_SESSIONS[user_id]
+                if user_id in FINAL_FORM_SESSIONS:
+                    del FINAL_FORM_SESSIONS[user_id]
+                if user_id in FORTUNE_WHEEL_SESSIONS:
+                    del FORTUNE_WHEEL_SESSIONS[user_id]
                 
                 # Get user name from VK
                 user_name = f"ID{user_id}"
@@ -1156,6 +1460,16 @@ class WebServer:
                 if user_id in ADMIN_SEARCH_SESSIONS:
                     del ADMIN_SEARCH_SESSIONS[user_id]
                     print(f"Admin search session cleared for user {user_id} - returned to menu", flush=True)
+                
+                # Clear final form session
+                if user_id in FINAL_FORM_SESSIONS:
+                    del FINAL_FORM_SESSIONS[user_id]
+                    print(f"Final form session cleared for user {user_id} - returned to menu", flush=True)
+                
+                # Clear fortune wheel session
+                if user_id in FORTUNE_WHEEL_SESSIONS:
+                    del FORTUNE_WHEEL_SESSIONS[user_id]
+                    print(f"Fortune wheel session cleared for user {user_id} - returned to menu", flush=True)
                 
                 # Check/create user by ID
                 user_data = await db.get_user(user_id)
@@ -1425,14 +1739,78 @@ class WebServer:
             
             # Handle "Финальное анкетирование" button
             if text.lower() == "финальное анкетирование":
-                # Stub for now
+                # Determine which course the user has access to
+                user_data = await db.get_user(user_id)
+                course = None
+                if user_data:
+                    for c in range(1, 5):
+                        if user_data.get(f"access_survey_{c}"):
+                            course = c
+                            break
+                
+                if not course:
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message="У вас нет доступа к финальному анкетированию.",
+                        peer_id=peer_id,
+                        keyboard=create_main_menu_keyboard()
+                    )
+                    return
+                
+                await self._start_final_form(user_id, peer_id, course)
+                return
+            
+            # Handle fortune wheel buttons
+            if text == "Крутить":
+                await self._handle_fortune_wheel_spin(user_id, peer_id)
+                return
+            
+            if text == "В другой раз":
                 await self.vk_api.send_message(
                     user_id=user_id,
-                    message=TEXTS_DATA.get("final_survey_stub", "Тут будет анкетирование после прохождения курса"),
+                    message=TEXTS_DATA.get("fortune_wheel_later", "Хорошо, вы сможете воспользоваться колесом фортуны позже через меню."),
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard_with_final_survey(is_admin)
+                    keyboard=create_main_menu_keyboard()
                 )
+                if user_id in FORTUNE_WHEEL_SESSIONS:
+                    del FORTUNE_WHEEL_SESSIONS[user_id]
                 return
+            
+            if text == "Испытать удачу":
+                await self._spin_fortune_wheel(user_id, peer_id)
+                return
+            
+            # Handle final form buttons (Да/Нет/Не знаю/Не против/Против/Верно/Исправить)
+            if user_id in FINAL_FORM_SESSIONS:
+                session = FINAL_FORM_SESSIONS[user_id]
+                question = get_final_form_question(session["current_question"])
+                
+                if question:
+                    question_type = question.get("type", "open")
+                    
+                    # Handle button-type questions
+                    if question_type == "buttons":
+                        buttons = question.get("buttons", [])
+                        if text in buttons or text in ["Верно", "Исправить ФИ", "Исправить ФИ и падеж"]:
+                            await self._handle_final_form_button(user_id, peer_id, text)
+                            return
+                    
+                    # Handle rating questions (1-10)
+                    if question_type == "rating":
+                        try:
+                            rating = int(text)
+                            min_val = question.get("min", 1)
+                            max_val = question.get("max", 10)
+                            if min_val <= rating <= max_val:
+                                await self._handle_final_form_button(user_id, peer_id, text)
+                                return
+                        except ValueError:
+                            pass  # Not a number, fall through to open answer handling
+                    
+                    # Handle open questions (text input)
+                    if question_type == "open":
+                        await self._handle_final_form_answer(user_id, peer_id, text)
+                        return
             
             # Handle "Сдал(а) практику" button
             if text.lower() == "сдал(а) практику" or text.lower() == "сдала практику" or text.lower() == "сдал практику":
@@ -2031,6 +2409,380 @@ class WebServer:
             peer_id=peer_id,
             keyboard=keyboard
         )
+
+    async def _start_final_form(self, user_id: int, peer_id: int, course: int) -> None:
+        """Start final form for user."""
+        # Check if user already completed this form
+        user_data = await db.get_user(user_id)
+        form_field = f"form_end_{course}"
+        if user_data and user_data.get(form_field):
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=TEXTS_DATA.get("final_form_already_completed", "Вы уже заполнили финальную анкету для этого курса!"),
+                peer_id=peer_id,
+                keyboard=create_main_menu_keyboard()
+            )
+            return
+        
+        # Send warning
+        warning_text = TEXTS_DATA.get("final_form_warning", "⚠️ Внимание! Если оборвать прохождение анкетирования, данные не сохранятся.")
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=warning_text,
+            peer_id=peer_id,
+            keyboard=create_final_form_open_keyboard()
+        )
+        
+        # Send intro message
+        intro_text = TEXTS_DATA.get("final_form_intro", "После прохождения анкеты мы обязательно пришлём Ваш диплом об успешном окончании курса! 🎉")
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=intro_text,
+            peer_id=peer_id
+        )
+        
+        # Get user data for name_case
+        user_name = user_data.get("user_name", "") if user_data else ""
+        user_name_case = user_data.get("user_name_case", "") if user_data else ""
+        
+        # Initialize session
+        FINAL_FORM_SESSIONS[user_id] = {
+            "course": course,
+            "step": "question",
+            "current_question": 1,
+            "answers": {},
+            "user_name": user_name,
+            "user_name_case": user_name_case,
+            "need_case_update": False
+        }
+        
+        # Send first question
+        await self._send_final_form_question(user_id, peer_id)
+
+    async def _send_final_form_question(self, user_id: int, peer_id: int) -> None:
+        """Send current final form question to user."""
+        session = FINAL_FORM_SESSIONS.get(user_id)
+        if not session:
+            print(f"No final form session for user {user_id}", flush=True)
+            return
+        
+        question_id = session["current_question"]
+        question = get_final_form_question(question_id)
+        
+        if not question:
+            print(f"Question not found: {question_id}", flush=True)
+            return
+        
+        question_text = question.get("question", "")
+        question_type = question.get("type", "open")
+        
+        # Substitute variables in question text
+        if "{user_name}" in question_text:
+            question_text = question_text.replace("{user_name}", session.get("user_name", ""))
+        if "{user_name_case}" in question_text:
+            question_text = question_text.replace("{user_name_case}", session.get("user_name_case", ""))
+        
+        # Add question prefix
+        prefix = TEXTS_DATA.get("final_form_question_prefix", "Вопрос {current}:")
+        message = prefix.format(current=question_id) + "\n\n" + question_text
+        
+        # Choose keyboard based on question type
+        if question_type == "open":
+            keyboard = create_final_form_open_keyboard()
+        elif question_type == "buttons":
+            buttons = question.get("buttons", [])
+            if buttons == ["Да", "Нет"]:
+                keyboard = create_yes_no_keyboard()
+            elif "Не знаю" in buttons:
+                keyboard = create_yes_no_unknown_keyboard()
+            elif "Не против" in buttons:
+                keyboard = create_agree_disagree_keyboard()
+            elif "Верно" in buttons:
+                keyboard = create_check_data_keyboard()
+            else:
+                keyboard = create_final_form_open_keyboard()
+        elif question_type == "rating":
+            keyboard = create_rating_keyboard(question.get("min", 1), question.get("max", 10))
+        else:
+            keyboard = create_final_form_open_keyboard()
+        
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=message,
+            peer_id=peer_id,
+            keyboard=keyboard
+        )
+
+    async def _handle_final_form_answer(self, user_id: int, peer_id: int, answer: str) -> None:
+        """Handle answer in final form."""
+        session = FINAL_FORM_SESSIONS.get(user_id)
+        if not session:
+            print(f"No final form session for user {user_id}", flush=True)
+            return
+        
+        question_id = session["current_question"]
+        question = get_final_form_question(question_id)
+        
+        if not question:
+            return
+        
+        # Save answer
+        save_as = question.get("save_as", f"question_{question_id}")
+        session["answers"][save_as] = answer
+        
+        # Check if this question updates user fields
+        update_field = question.get("update_field")
+        if update_field:
+            await db.update_user_field(user_id, update_field, answer)
+            if update_field == "user_name":
+                session["user_name"] = answer
+            elif update_field == "user_name_case":
+                session["user_name_case"] = answer
+        
+        # Handle special case: check_need_case_update
+        next_question = get_next_question_id(question_id, answer)
+        
+        if next_question == "check_need_case_update":
+            # This comes after question 14, check if we need case update
+            if session.get("need_case_update"):
+                session["current_question"] = 15
+            else:
+                await self._finish_final_form(user_id, peer_id)
+                return
+        elif next_question == "finish" or next_question is None:
+            await self._finish_final_form(user_id, peer_id)
+            return
+        else:
+            session["current_question"] = next_question
+        
+        await self._send_final_form_question(user_id, peer_id)
+
+    async def _handle_final_form_button(self, user_id: int, peer_id: int, button: str) -> None:
+        """Handle button press in final form."""
+        session = FINAL_FORM_SESSIONS.get(user_id)
+        if not session:
+            return
+        
+        question_id = session["current_question"]
+        question = get_final_form_question(question_id)
+        
+        if not question:
+            return
+        
+        question_type = question.get("type", "open")
+        
+        # For rating questions, validate the button
+        if question_type == "rating":
+            try:
+                rating = int(button)
+                min_val = question.get("min", 1)
+                max_val = question.get("max", 10)
+                if rating < min_val or rating > max_val:
+                    return  # Invalid rating, ignore
+            except ValueError:
+                return  # Not a number, ignore
+        
+        # Save answer
+        save_as = question.get("save_as", f"question_{question_id}")
+        session["answers"][save_as] = button
+        
+        # Get next question
+        next_question = get_next_question_id(question_id, button)
+        
+        # Handle special buttons for question 13
+        if question_id == 13 or str(question_id) == "13":
+            if button == "Верно":
+                await self._finish_final_form(user_id, peer_id)
+                return
+            elif button == "Исправить ФИ":
+                session["current_question"] = 14
+                session["need_case_update"] = False
+                await self._send_final_form_question(user_id, peer_id)
+                return
+            elif button == "Исправить ФИ и падеж":
+                session["current_question"] = 14
+                session["need_case_update"] = True
+                await self._send_final_form_question(user_id, peer_id)
+                return
+        
+        if next_question == "finish" or next_question is None:
+            await self._finish_final_form(user_id, peer_id)
+            return
+        
+        session["current_question"] = next_question
+        await self._send_final_form_question(user_id, peer_id)
+
+    async def _finish_final_form(self, user_id: int, peer_id: int) -> None:
+        """Finish final form and save results."""
+        session = FINAL_FORM_SESSIONS.get(user_id)
+        if not session:
+            return
+        
+        course = session["course"]
+        answers = session["answers"]
+        
+        # Format answers
+        answers_text_lines = []
+        for key, value in answers.items():
+            answers_text_lines.append(f"{key}: {value}")
+        answers_text = "\n".join(answers_text_lines)
+        
+        # Save to database
+        form_field = f"form_end_{course}"
+        await db.update_user_field(user_id, form_field, answers_text)
+        
+        # Update course completed flag
+        course_field = f"course_{course}"
+        await db.update_user_field(user_id, course_field, True)
+        
+        print(f"Final form completed for user {user_id}, course {course}", flush=True)
+        
+        # Send congratulations
+        congrats_text = TEXTS_DATA.get("diploma_congratulations", "Поздравляем с окончанием курса💥\nС радостью вручаем сертификат🥳")
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=congrats_text,
+            peer_id=peer_id,
+            keyboard=create_main_menu_keyboard()
+        )
+        
+        # Notify admins
+        if CHECK_TEST_IDS:
+            user_data = await db.get_user(user_id)
+            user_name = user_data.get("user_name", f"ID{user_id}") if user_data else f"ID{user_id}"
+            user_link = f"[id{user_id}|{user_name}]"
+            msg_template = TEXTS_DATA.get("final_form_admin_notification", "📋 Пользователь {user_link} заполнил финальную анкету курса {course}!\n\n{form_answers}")
+            admin_message = msg_template.format(user_link=user_link, course=course, form_answers=answers_text)
+            for admin_id in CHECK_TEST_IDS:
+                try:
+                    await self.vk_api.send_message(
+                        user_id=admin_id,
+                        message=admin_message
+                    )
+                except Exception as e:
+                    print(f"Failed to notify admin {admin_id}: {e}", flush=True)
+        
+        # Clear session
+        del FINAL_FORM_SESSIONS[user_id]
+        
+        # Offer fortune wheel
+        await self._offer_fortune_wheel(user_id, peer_id, course)
+
+    async def _offer_fortune_wheel(self, user_id: int, peer_id: int, course: int) -> None:
+        """Offer fortune wheel to user."""
+        # Check if fortune wheel already used
+        user_data = await db.get_user(user_id)
+        fortune_field = f"fortune_wheel_{course}"
+        
+        if user_data and user_data.get(fortune_field):
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=TEXTS_DATA.get("fortune_wheel_already_used", "Вы уже использовали своё вращение колеса фортуны для этого курса."),
+                peer_id=peer_id,
+                keyboard=create_main_menu_keyboard()
+            )
+            return
+        
+        # Offer wheel
+        intro_text = TEXTS_DATA.get("fortune_wheel_intro", "Вам доступно 1 вращение \"Колеса фортуны\"")
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=intro_text,
+            peer_id=peer_id,
+            keyboard=create_fortune_wheel_keyboard()
+        )
+        
+        # Initialize wheel session
+        FORTUNE_WHEEL_SESSIONS[user_id] = {
+            "course": course,
+            "spin_available": True
+        }
+
+    async def _handle_fortune_wheel_spin(self, user_id: int, peer_id: int) -> None:
+        """Handle fortune wheel spin."""
+        session = FORTUNE_WHEEL_SESSIONS.get(user_id)
+        if not session:
+            return
+        
+        course = session["course"]
+        
+        # Check if already used
+        user_data = await db.get_user(user_id)
+        fortune_field = f"fortune_wheel_{course}"
+        
+        if user_data and user_data.get(fortune_field):
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=TEXTS_DATA.get("fortune_wheel_already_used", "Вы уже использовали своё вращение колеса фортуны."),
+                peer_id=peer_id,
+                keyboard=create_main_menu_keyboard()
+            )
+            del FORTUNE_WHEEL_SESSIONS[user_id]
+            return
+        
+        # Show prizes and spin button
+        prizes_list = get_sorted_prizes_list()
+        ready_text = TEXTS_DATA.get("fortune_wheel_ready", "Готовы испытать удачу?\nПризы, которые мы разыгрываем:\n\n{prizes_list}")
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=ready_text.format(prizes_list=prizes_list),
+            peer_id=peer_id,
+            keyboard=create_spin_wheel_keyboard()
+        )
+
+    async def _spin_fortune_wheel(self, user_id: int, peer_id: int) -> None:
+        """Spin the fortune wheel and award prize."""
+        session = FORTUNE_WHEEL_SESSIONS.get(user_id)
+        if not session:
+            return
+        
+        course = session["course"]
+        
+        # Check if already used
+        user_data = await db.get_user(user_id)
+        fortune_field = f"fortune_wheel_{course}"
+        
+        if user_data and user_data.get(fortune_field):
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=TEXTS_DATA.get("fortune_wheel_already_used", "Вы уже использовали своё вращение колеса фортуны."),
+                peer_id=peer_id,
+                keyboard=create_main_menu_keyboard()
+            )
+            del FORTUNE_WHEEL_SESSIONS[user_id]
+            return
+        
+        # Select prize
+        prizes = FINAL_FORM_DATA.get("fortune_wheel", {}).get("prizes", [])
+        prize = select_prize_by_probability(prizes)
+        
+        # Mark as used
+        await db.update_user_field(user_id, fortune_field, True)
+        
+        # Notify about prize
+        result_text = TEXTS_DATA.get("fortune_wheel_result", "🎉 Поздравляем! Вам выпало:\n\n🎁 {prize}")
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=result_text.format(prize=prize),
+            peer_id=peer_id,
+            keyboard=create_main_menu_keyboard()
+        )
+        
+        # Send instructions for getting prize
+        if is_physical_prize(prize):
+            instruction_text = TEXTS_DATA.get("prize_physical", "Для того, что бы получить свой приз, подойдите к тренеру перед тренировкой и покажите скрин экрана с выпавшим призом!")
+        else:
+            instruction_text = TEXTS_DATA.get("prize_digital", "С Вами в ближайшее время свяжется персональный менеджер и расскажет, как забрать свой приз!")
+        
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=instruction_text,
+            peer_id=peer_id,
+            keyboard=create_main_menu_keyboard()
+        )
+        
+        # Clear session
+        del FORTUNE_WHEEL_SESSIONS[user_id]
 
 
 # -----------------------------------------------------------------------------
