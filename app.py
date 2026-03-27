@@ -844,20 +844,8 @@ def create_admin_keyboard() -> Dict:
             ],
             [
                 {
-                    "action": {"type": "text", "label": "Синхронизация"},
+                    "action": {"type": "text", "label": "Открыть доступ к финальной анкете"},
                     "color": "primary"
-                }
-            ],
-            [
-                {
-                    "action": {"type": "text", "label": "Открыть доступ к Анкете"},
-                    "color": "primary"
-                }
-            ],
-            [
-                {
-                    "action": {"type": "text", "label": "Сырые данные"},
-                    "color": "negative"
                 }
             ],
             [
@@ -1926,23 +1914,8 @@ class WebServer:
                 }
                 return
             
-            # Handle "Синхронизация" button (renamed from "Обновление базы")
-            if text.lower() == "синхронизация" and is_admin:
-                await self._handle_sync_users(user_id, peer_id)
-                return
-            
-            # Handle "Обновление базы" button (legacy, for backwards compatibility)
-            if text.lower() == "обновление базы" and is_admin:
-                await self._handle_sync_users(user_id, peer_id)
-                return
-            
-            # Handle "Сырые данные" button - show raw database values
-            if text.lower() == "сырые данные" and is_admin:
-                await self._handle_raw_data(user_id, peer_id)
-                return
-            
-            # Handle "Открыть доступ к Анкете" button
-            if text.lower() == "открыть доступ к анкете" and is_admin:
+            # Handle "Открыть доступ к финальной анкете" button
+            if text.lower() == "открыть доступ к финальной анкете" and is_admin:
                 # Clear any existing admin search session
                 if user_id in ADMIN_SEARCH_SESSIONS:
                     del ADMIN_SEARCH_SESSIONS[user_id]
@@ -2495,156 +2468,6 @@ class WebServer:
             await self.vk_api.send_message(
                 user_id=user_id,
                 message=f"❌ Ошибка при импорте: {e}",
-                peer_id=peer_id,
-                keyboard=create_admin_keyboard()
-            )
-
-    async def _handle_sync_users(self, user_id: int, peer_id: int) -> None:
-        """Handle 'Обновление базы' button - sync all VK conversations to database."""
-        print(f"Sync users button pressed by user {user_id}", flush=True)
-        
-        try:
-            # Notify admin that sync started
-            await self.vk_api.send_message(
-                user_id=user_id,
-                message=TEXTS_DATA.get("db_sync_start", "🔄 Начинаю синхронизацию пользователей из чатов..."),
-                peer_id=peer_id,
-                keyboard=create_admin_keyboard()
-            )
-            
-            # Get all conversations
-            all_user_ids = await self.vk_api.get_all_conversations()
-            
-            if not all_user_ids:
-                await self.vk_api.send_message(
-                    user_id=user_id,
-                    message=TEXTS_DATA.get("db_sync_no_chats", "Чаты не найдены."),
-                    peer_id=peer_id,
-                    keyboard=create_admin_keyboard()
-                )
-                return
-            
-            print(f"Found {len(all_user_ids)} user conversations", flush=True)
-            
-            # Get existing users from database
-            existing_users = await db.get_all_users()
-            existing_ids = set(u.get("user_id") for u in existing_users) if existing_users else set()
-            
-            # Find new users
-            new_user_ids = [uid for uid in all_user_ids if uid not in existing_ids]
-            
-            if not new_user_ids:
-                msg_template = TEXTS_DATA.get("db_sync_no_new", "✅ Синхронизация завершена.\n\nВсего чатов: {total}\nНовых пользователей: 0\nВсе уже есть в базе.")
-                await self.vk_api.send_message(
-                    user_id=user_id,
-                    message=msg_template.format(total=len(all_user_ids)),
-                    peer_id=peer_id,
-                    keyboard=create_admin_keyboard()
-                )
-                return
-            
-            # Create new users
-            created_count = 0
-            for new_user_id in new_user_ids:
-                # Get user name from VK
-                user_name = f"ID{new_user_id}"
-                try:
-                    user_info = await self.vk_api.get_user_info(new_user_id)
-                    if "response" in user_info and user_info["response"]:
-                        first_name = user_info["response"][0].get("first_name", "")
-                        last_name = user_info["response"][0].get("last_name", "")
-                        user_name = f"{first_name} {last_name}"
-                except Exception as e:
-                    print(f"Error getting user info for {new_user_id}: {e}", flush=True)
-                
-                # Create user in database
-                success = await db.create_user(new_user_id, user_name)
-                if success:
-                    created_count += 1
-                    print(f"Created user {new_user_id} ({user_name})", flush=True)
-            
-            # Send result
-            msg_template = TEXTS_DATA.get("db_sync_success", "✅ Синхронизация завершена.\n\nВсего чатов: {total}\nУже в базе: {existing}\nДобавлено новых: {created}")
-            await self.vk_api.send_message(
-                user_id=user_id,
-                message=msg_template.format(total=len(all_user_ids), existing=len(existing_ids), created=created_count),
-                peer_id=peer_id,
-                keyboard=create_admin_keyboard()
-            )
-            
-        except Exception as e:
-            print(f"Error handling sync users: {e}", flush=True)
-            msg_template = TEXTS_DATA.get("db_sync_error", "❌ Ошибка синхронизации: {error}")
-            await self.vk_api.send_message(
-                user_id=user_id,
-                message=msg_template.format(error=e),
-                peer_id=peer_id,
-                keyboard=create_admin_keyboard()
-            )
-
-    async def _handle_raw_data(self, user_id: int, peer_id: int) -> None:
-        """Show raw database values for current admin user."""
-        print(f"Raw data request from admin {user_id}", flush=True)
-        
-        try:
-            # Get current user data from database
-            user_data = await db.get_user(user_id)
-            
-            if not user_data:
-                await self.vk_api.send_message(
-                    user_id=user_id,
-                    message="❌ Пользователь не найден в базе данных.",
-                    peer_id=peer_id,
-                    keyboard=create_admin_keyboard()
-                )
-                return
-            
-            # Build raw data message - show actual integer values
-            message = "📊 СЫРЫЕ ДАННЫЕ ИЗ БД:\n"
-            message += f"━━━━━━━━━━━━━━━━━━━━\n"
-            message += f"user_id: {user_data.get('user_id', 'NULL')}\n"
-            message += f"user_name: {user_data.get('user_name', 'NULL')}\n"
-            message += f"━━━━━━━━━━━━━━━━━━━━\n"
-            message += f"form_first: {user_data.get('form_first', 'NULL')}\n"
-            message += f"test_book_1: {user_data.get('test_book_1', 'NULL')}\n"
-            message += f"test_book_2: {user_data.get('test_book_2', 'NULL')}\n"
-            message += f"test_book_3: {user_data.get('test_book_3', 'NULL')}\n"
-            message += f"test_book_4: {user_data.get('test_book_4', 'NULL')}\n"
-            message += f"━━━━━━━━━━━━━━━━━━━━\n"
-            message += f"practice_1: {user_data.get('practice_1', 'NULL')}\n"
-            message += f"practice_2: {user_data.get('practice_2', 'NULL')}\n"
-            message += f"practice_3: {user_data.get('practice_3', 'NULL')}\n"
-            message += f"practice_4: {user_data.get('practice_4', 'NULL')}\n"
-            message += f"━━━━━━━━━━━━━━━━━━━━\n"
-            message += f"access_survey_1: {user_data.get('access_survey_1', 'NULL')}\n"
-            message += f"access_survey_2: {user_data.get('access_survey_2', 'NULL')}\n"
-            message += f"access_survey_3: {user_data.get('access_survey_3', 'NULL')}\n"
-            message += f"access_survey_4: {user_data.get('access_survey_4', 'NULL')}\n"
-            message += f"━━━━━━━━━━━━━━━━━━━━\n"
-            message += f"diploma_1: {user_data.get('diploma_1', 'NULL')}\n"
-            message += f"diploma_2: {user_data.get('diploma_2', 'NULL')}\n"
-            message += f"diploma_3: {user_data.get('diploma_3', 'NULL')}\n"
-            message += f"diploma_4: {user_data.get('diploma_4', 'NULL')}\n"
-            message += f"━━━━━━━━━━━━━━━━━━━━\n"
-            message += f"fortune_wheel: {user_data.get('fortune_wheel', 'NULL')}\n"
-            message += f"━━━━━━━━━━━━━━━━━━━━\n"
-            message += "📝 Легенда:\n"
-            message += "0 = заблокировано\n"
-            message += "1 = доступно (кнопка)\n"
-            message += "2 = выполнено"
-            
-            await self.vk_api.send_message(
-                user_id=user_id,
-                message=message,
-                peer_id=peer_id,
-                keyboard=create_admin_keyboard()
-            )
-            
-        except Exception as e:
-            print(f"Error handling raw data: {e}", flush=True)
-            await self.vk_api.send_message(
-                user_id=user_id,
-                message=f"❌ Ошибка: {e}",
                 peer_id=peer_id,
                 keyboard=create_admin_keyboard()
             )
