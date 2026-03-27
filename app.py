@@ -24,8 +24,8 @@ sys.stderr.reconfigure(line_buffering=True)
 # -----------------------------------------------------------------------------
 TOKEN = os.getenv("TOKEN", "")
 CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")
-CHECK_TEST_STR = os.getenv("CHECK_TEST", "")  # Admin IDs for test notifications
-USER_ADMIN = os.getenv("USER_ADMIN", "")  # Super admin ID for database export
+CHECK_TEST_STR = os.getenv("CHECK_TEST", "")  # USER_MEN - Manager IDs for notifications (test passed, form completed, practice done)
+USER_ADMIN = os.getenv("USER_ADMIN", "")  # Super admin ID for admin panel and database export
 PORT = int(os.getenv("PORT", "8080"))
 
 # Database configuration (Amvera PostgreSQL)
@@ -34,7 +34,7 @@ DB_NAME = os.getenv("DB_NAME", "")
 DB_USER = os.getenv("DB_USER", "")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
-# Parse admin IDs from comma-separated string
+# Parse manager IDs (USER_MEN) from comma-separated string
 CHECK_TEST_IDS = [int(id.strip()) for id in CHECK_TEST_STR.split(",") if id.strip()]
 
 # Parse super admin ID
@@ -53,7 +53,7 @@ print("=" * 50, flush=True)
 print("VK BOT STARTING", flush=True)
 print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
-print(f"CHECK_TEST_IDS: {CHECK_TEST_IDS}", flush=True)
+print(f"CHECK_TEST_IDS (USER_MEN): {CHECK_TEST_IDS}", flush=True)
 print(f"USER_ADMIN_ID: {USER_ADMIN_ID}", flush=True)
 print(f"DB_HOST: {'SET' if DB_HOST else 'NOT SET'}", flush=True)
 print(f"DB_NAME: {'SET' if DB_NAME else 'NOT SET'}", flush=True)
@@ -150,28 +150,29 @@ class Database:
                         user_id BIGINT PRIMARY KEY,
                         user_name TEXT,
                         user_name_case TEXT DEFAULT '',
-                        form_first BOOLEAN DEFAULT FALSE,
+                        "ФИ_датпад" TEXT DEFAULT '',
+                        form_first INTEGER DEFAULT 0,
                         form_first_answer TEXT DEFAULT '',
-                        test_book_1 BOOLEAN DEFAULT FALSE,
-                        test_book_2 BOOLEAN DEFAULT FALSE,
-                        test_book_3 BOOLEAN DEFAULT FALSE,
-                        test_book_4 BOOLEAN DEFAULT FALSE,
-                        practice_1 BOOLEAN DEFAULT FALSE,
-                        practice_2 BOOLEAN DEFAULT FALSE,
-                        practice_3 BOOLEAN DEFAULT FALSE,
-                        practice_4 BOOLEAN DEFAULT FALSE,
-                        course_1 BOOLEAN DEFAULT FALSE,
-                        course_2 BOOLEAN DEFAULT FALSE,
-                        course_3 BOOLEAN DEFAULT FALSE,
-                        course_4 BOOLEAN DEFAULT FALSE,
-                        access_survey_1 BOOLEAN DEFAULT FALSE,
-                        access_survey_2 BOOLEAN DEFAULT FALSE,
-                        access_survey_3 BOOLEAN DEFAULT FALSE,
-                        access_survey_4 BOOLEAN DEFAULT FALSE,
+                        test_book_1 INTEGER DEFAULT 0,
+                        test_book_2 INTEGER DEFAULT 0,
+                        test_book_3 INTEGER DEFAULT 0,
+                        test_book_4 INTEGER DEFAULT 0,
+                        practice_1 INTEGER DEFAULT 0,
+                        practice_2 INTEGER DEFAULT 0,
+                        practice_3 INTEGER DEFAULT 0,
+                        practice_4 INTEGER DEFAULT 0,
+                        access_survey_1 INTEGER DEFAULT 0,
+                        access_survey_2 INTEGER DEFAULT 0,
+                        access_survey_3 INTEGER DEFAULT 0,
+                        access_survey_4 INTEGER DEFAULT 0,
                         form_end_1 TEXT DEFAULT '',
                         form_end_2 TEXT DEFAULT '',
                         form_end_3 TEXT DEFAULT '',
                         form_end_4 TEXT DEFAULT '',
+                        diploma_1 INTEGER DEFAULT 0,
+                        diploma_2 INTEGER DEFAULT 0,
+                        diploma_3 INTEGER DEFAULT 0,
+                        diploma_4 INTEGER DEFAULT 0,
                         fortune_wheel INTEGER DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -183,24 +184,29 @@ class Database:
             async with self.pool.acquire() as conn:
                 new_columns = [
                     ("user_name_case", "TEXT DEFAULT ''"),
-                    ("form_first", "BOOLEAN DEFAULT FALSE"),
+                    ("\"ФИ_датпад\"", "TEXT DEFAULT ''"),
+                    ("form_first", "INTEGER DEFAULT 0"),
                     ("form_first_answer", "TEXT DEFAULT ''"),
-                    ("practice_1", "BOOLEAN DEFAULT FALSE"),
-                    ("practice_2", "BOOLEAN DEFAULT FALSE"),
-                    ("practice_3", "BOOLEAN DEFAULT FALSE"),
-                    ("practice_4", "BOOLEAN DEFAULT FALSE"),
-                    ("course_1", "BOOLEAN DEFAULT FALSE"),
-                    ("course_2", "BOOLEAN DEFAULT FALSE"),
-                    ("course_3", "BOOLEAN DEFAULT FALSE"),
-                    ("course_4", "BOOLEAN DEFAULT FALSE"),
-                    ("access_survey_1", "BOOLEAN DEFAULT FALSE"),
-                    ("access_survey_2", "BOOLEAN DEFAULT FALSE"),
-                    ("access_survey_3", "BOOLEAN DEFAULT FALSE"),
-                    ("access_survey_4", "BOOLEAN DEFAULT FALSE"),
+                    ("test_book_1", "INTEGER DEFAULT 0"),
+                    ("test_book_2", "INTEGER DEFAULT 0"),
+                    ("test_book_3", "INTEGER DEFAULT 0"),
+                    ("test_book_4", "INTEGER DEFAULT 0"),
+                    ("practice_1", "INTEGER DEFAULT 0"),
+                    ("practice_2", "INTEGER DEFAULT 0"),
+                    ("practice_3", "INTEGER DEFAULT 0"),
+                    ("practice_4", "INTEGER DEFAULT 0"),
+                    ("access_survey_1", "INTEGER DEFAULT 0"),
+                    ("access_survey_2", "INTEGER DEFAULT 0"),
+                    ("access_survey_3", "INTEGER DEFAULT 0"),
+                    ("access_survey_4", "INTEGER DEFAULT 0"),
                     ("form_end_1", "TEXT DEFAULT ''"),
                     ("form_end_2", "TEXT DEFAULT ''"),
                     ("form_end_3", "TEXT DEFAULT ''"),
                     ("form_end_4", "TEXT DEFAULT ''"),
+                    ("diploma_1", "INTEGER DEFAULT 0"),
+                    ("diploma_2", "INTEGER DEFAULT 0"),
+                    ("diploma_3", "INTEGER DEFAULT 0"),
+                    ("diploma_4", "INTEGER DEFAULT 0"),
                     ("fortune_wheel", "INTEGER DEFAULT 0"),
                 ]
                 for col_name, col_type in new_columns:
@@ -209,22 +215,66 @@ class Database:
                     except Exception as e:
                         print(f"Column {col_name} might already exist: {e}", flush=True)
                 
-                # Migrate old columns to new ones if they exist
-                try:
-                    # Check if old 'form' column exists and migrate
-                    await conn.execute('''
-                        UPDATE users SET form_first = form WHERE form = TRUE AND form_first = FALSE
-                    ''')
-                except Exception as e:
-                    print(f"Migration form->form_first: {e}", flush=True)
+                # Migrate BOOLEAN to INTEGER if needed with proper state transitions
+                # Logic: 0 = inaccessible, 1 = accessible (show button), 2 = completed
+                # Transition logic:
+                #   - form_first = 2 → test_book_X = 1
+                #   - test_book_X = 2 → practice_X = 1
+                #   - access_survey_X = 1 (opened by manager), = 2 (completed)
                 
                 try:
-                    # Check if old 'form_answer' column exists and migrate
-                    await conn.execute('''
-                        UPDATE users SET form_first_answer = form_answer WHERE form_answer IS NOT NULL AND form_first_answer = ''
-                    ''')
+                    # Step 1: Convert BOOLEAN to INTEGER (Да = 2, Нет = 0)
+                    # Migrate form_first: TRUE → 2, FALSE → 0
+                    await conn.execute('''UPDATE users SET form_first = 2 WHERE form_first = TRUE OR form_first = 't'::boolean''')
+                    await conn.execute('''UPDATE users SET form_first = 0 WHERE form_first = FALSE OR form_first = 'f'::boolean''')
+                    print("Migration: form_first converted", flush=True)
                 except Exception as e:
-                    print(f"Migration form_answer->form_first_answer: {e}", flush=True)
+                    print(f"Migration form_first: {e}", flush=True)
+                
+                try:
+                    # Migrate test_book_X: TRUE → 2, FALSE → 0
+                    for i in range(1, 5):
+                        await conn.execute(f'''UPDATE users SET test_book_{i} = 2 WHERE test_book_{i} = TRUE OR test_book_{i} = 't'::boolean''')
+                        await conn.execute(f'''UPDATE users SET test_book_{i} = 0 WHERE test_book_{i} = FALSE OR test_book_{i} = 'f'::boolean''')
+                    print("Migration: test_book_X converted", flush=True)
+                except Exception as e:
+                    print(f"Migration test_book_X: {e}", flush=True)
+                
+                try:
+                    # Migrate practice_X: TRUE → 2, FALSE → 0
+                    for i in range(1, 5):
+                        await conn.execute(f'''UPDATE users SET practice_{i} = 2 WHERE practice_{i} = TRUE OR practice_{i} = 't'::boolean''')
+                        await conn.execute(f'''UPDATE users SET practice_{i} = 0 WHERE practice_{i} = FALSE OR practice_{i} = 'f'::boolean''')
+                    print("Migration: practice_X converted", flush=True)
+                except Exception as e:
+                    print(f"Migration practice_X: {e}", flush=True)
+                
+                try:
+                    # Migrate access_survey_X: TRUE → 1 (was opened), FALSE → 0
+                    for i in range(1, 5):
+                        await conn.execute(f'''UPDATE users SET access_survey_{i} = 1 WHERE access_survey_{i} = TRUE OR access_survey_{i} = 't'::boolean''')
+                        await conn.execute(f'''UPDATE users SET access_survey_{i} = 0 WHERE access_survey_{i} = FALSE OR access_survey_{i} = 'f'::boolean''')
+                    print("Migration: access_survey_X converted", flush=True)
+                except Exception as e:
+                    print(f"Migration access_survey_X: {e}", flush=True)
+                
+                # Step 2: Apply state transition logic
+                try:
+                    # If form_first = 2 (completed), set test_book_1 = 1 (accessible)
+                    # But only if test_book_1 is not already 2 (completed)
+                    for i in range(1, 5):
+                        await conn.execute(f'''UPDATE users SET test_book_{i} = 1 WHERE form_first = 2 AND test_book_{i} = 0''')
+                    print("Migration: test_book_X transition applied", flush=True)
+                    
+                    # If test_book_X = 2 (passed), set practice_X = 1 (accessible)
+                    # But only if practice_X is not already 2 (completed)
+                    for i in range(1, 5):
+                        await conn.execute(f'''UPDATE users SET practice_{i} = 1 WHERE test_book_{i} = 2 AND practice_{i} = 0''')
+                    print("Migration: practice_X transition applied", flush=True)
+                    
+                    print("Migration: State transitions completed", flush=True)
+                except Exception as e:
+                    print(f"Migration state transitions: {e}", flush=True)
                 
                 print("Database columns verified/added", flush=True)
             
@@ -272,7 +322,7 @@ class Database:
             return []
     
     async def create_user(self, user_id: int, user_name: str) -> bool:
-        """Create new user."""
+        """Create new user. By default, only form_first = 1 (accessible)."""
         if not self.pool:
             return False
         
@@ -280,8 +330,11 @@ class Database:
             async with self.pool.acquire() as conn:
                 await conn.execute('''
                     INSERT INTO users (user_id, user_name, form_first, form_first_answer, 
-                                       test_book_1, test_book_2, test_book_3, test_book_4)
-                    VALUES ($1, $2, FALSE, '', FALSE, FALSE, FALSE, FALSE)
+                                       test_book_1, test_book_2, test_book_3, test_book_4,
+                                       practice_1, practice_2, practice_3, practice_4,
+                                       access_survey_1, access_survey_2, access_survey_3, access_survey_4,
+                                       diploma_1, diploma_2, diploma_3, diploma_4)
+                    VALUES ($1, $2, 1, '', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
                     ON CONFLICT (user_id) DO UPDATE SET user_name = $2, updated_at = CURRENT_TIMESTAMP
                 ''', user_id, user_name)
                 print(f"User {user_id} created/updated in database", flush=True)
@@ -296,12 +349,13 @@ class Database:
             return False
         
         allowed_fields = [
-            'form_first', 'form_first_answer', 'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 'user_name',
-            'user_name_case',
+            'form_first', 'form_first_answer', 
+            'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 
+            'user_name', 'user_name_case', '"ФИ_датпад"',
             'practice_1', 'practice_2', 'practice_3', 'practice_4',
-            'course_1', 'course_2', 'course_3', 'course_4',
             'access_survey_1', 'access_survey_2', 'access_survey_3', 'access_survey_4',
             'form_end_1', 'form_end_2', 'form_end_3', 'form_end_4',
+            'diploma_1', 'diploma_2', 'diploma_3', 'diploma_4',
             'fortune_wheel'
         ]
         if field not in allowed_fields:
@@ -933,7 +987,33 @@ def create_form_keyboard() -> Dict:
 
 
 def create_yes_no_keyboard() -> Dict:
-    """Keyboard with Да/Нет buttons for final form questions."""
+    """Keyboard with Да/Нет buttons for final form questions (swapped colors: Да=negative, Нет=positive)."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Да"},
+                    "color": "negative"
+                },
+                {
+                    "action": {"type": "text", "label": "Нет"},
+                    "color": "positive"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+
+def create_yes_no_keyboard_original() -> Dict:
+    """Keyboard with Да/Нет buttons for final form questions (original colors: Да=positive, Нет=negative)."""
     return {
         "one_time": False,
         "inline": False,
@@ -959,7 +1039,7 @@ def create_yes_no_keyboard() -> Dict:
 
 
 def create_yes_no_unknown_keyboard() -> Dict:
-    """Keyboard with Да/Нет/Не знаю buttons for final form questions."""
+    """Keyboard with Да/Нет/Не знаю buttons for final form questions (swapped colors: Да=negative, Нет=positive)."""
     return {
         "one_time": False,
         "inline": False,
@@ -967,11 +1047,11 @@ def create_yes_no_unknown_keyboard() -> Dict:
             [
                 {
                     "action": {"type": "text", "label": "Да"},
-                    "color": "positive"
+                    "color": "negative"
                 },
                 {
                     "action": {"type": "text", "label": "Нет"},
-                    "color": "negative"
+                    "color": "positive"
                 },
                 {
                     "action": {"type": "text", "label": "Не знаю"},
@@ -1134,6 +1214,36 @@ def create_final_form_open_keyboard() -> Dict:
                 }
             ]
         ]
+    }
+
+
+def create_menu_keyboard_with_diploma(is_admin: bool = False) -> Dict:
+    """Menu keyboard with diploma download button."""
+    buttons = [
+        [
+            {
+                "action": {"type": "text", "label": "Меню"},
+                "color": "primary"
+            },
+            {
+                "action": {"type": "text", "label": "Скачать диплом"},
+                "color": "positive"
+            }
+        ]
+    ]
+    
+    if is_admin:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "АДМИН"},
+                "color": "negative"
+            }
+        ])
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
     }
 
 
@@ -1447,7 +1557,7 @@ class WebServer:
             "status": "ok",
             "token_configured": bool(TOKEN),
             "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
-            "check_test_ids": CHECK_TEST_IDS,
+            "check_test_ids_user_men": CHECK_TEST_IDS,
             "user_admin_id": USER_ADMIN_ID,
             "tests_loaded": bool(TESTS_DATA),
             "texts_loaded": bool(TEXTS_DATA),
@@ -1536,27 +1646,33 @@ class WebServer:
                 # Check/create user in database
                 user_data = await db.get_user(user_id)
                 if not user_data:
-                    # Create new user
+                    # Create new user (form_first = 1 by default)
                     await db.create_user(user_id, user_name)
                     user_data = await db.get_user(user_id)
                 
-                # Check FORM status, test status, and access to final survey
-                form_completed = user_data.get("form_first", False) if user_data else False
-                test_passed = user_data.get("test_book_1", False) if user_data else False
-                has_final_survey_access = any([
-                    user_data.get("access_survey_1", False),
-                    user_data.get("access_survey_2", False),
-                    user_data.get("access_survey_3", False),
-                    user_data.get("access_survey_4", False)
-                ]) if user_data else False
+                # Get status - now using INTEGER values
+                # 0 = inaccessible, 1 = accessible (show button), 2 = completed
+                form_first_status = user_data.get("form_first", 0) if user_data else 0
+                test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
+                practice_1_status = user_data.get("practice_1", 0) if user_data else 0
+                access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
+                diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+                fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
                 
-                # Choose appropriate keyboard
-                if has_final_survey_access and test_passed:
-                    keyboard = create_menu_keyboard_with_practice_and_survey(is_admin)
-                elif test_passed:
+                # Choose appropriate keyboard (same logic as Menu)
+                # INTEGER logic: 0=hidden, 1=show button, 2=completed
+                if fortune_wheel_spins > 0:
+                    keyboard = create_main_menu_keyboard_with_fortune_wheel(is_admin, fortune_wheel_spins)
+                elif diploma_1_status == 1:
+                    keyboard = create_menu_keyboard_with_diploma(is_admin)
+                elif access_survey_1_status == 1:
+                    keyboard = create_menu_keyboard_with_final_survey(is_admin)
+                elif practice_1_status == 1:
                     keyboard = create_menu_keyboard_after_test_passed(is_admin)
-                elif form_completed:
+                elif test_book_1_status == 1:
                     keyboard = create_menu_keyboard_with_test(is_admin)
+                elif form_first_status == 1:
+                    keyboard = create_menu_keyboard_with_form(is_admin)
                 else:
                     keyboard = create_menu_keyboard_with_form(is_admin)
                 
@@ -1614,28 +1730,37 @@ class WebServer:
                     print(f"New user {user_id} ({user_name}) created via Menu button", flush=True)
                     user_data = await db.get_user(user_id)
                 
-                # Get FORM status, test status, and access to final survey
-                form_completed = user_data.get("form_first", False) if user_data else False
-                test_passed = user_data.get("test_book_1", False) if user_data else False
-                has_final_survey_access = any([
-                    user_data.get("access_survey_1", False),
-                    user_data.get("access_survey_2", False),
-                    user_data.get("access_survey_3", False),
-                    user_data.get("access_survey_4", False)
-                ]) if user_data else False
+                # Get status - now using INTEGER values
+                # 0 = inaccessible, 1 = accessible (show button), 2 = completed
+                form_first_status = user_data.get("form_first", 0) if user_data else 0
+                test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
+                practice_1_status = user_data.get("practice_1", 0) if user_data else 0
+                access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
+                diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
                 fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
                 
                 # Choose appropriate keyboard based on user state
+                # INTEGER logic: 0=hidden, 1=show button, 2=completed
                 if fortune_wheel_spins > 0:
-                    # Show fortune wheel button if spins available
+                    # State 6: Show fortune wheel button
                     keyboard = create_main_menu_keyboard_with_fortune_wheel(is_admin, fortune_wheel_spins)
-                elif has_final_survey_access and test_passed:
-                    keyboard = create_menu_keyboard_with_practice_and_survey(is_admin)
-                elif test_passed:
+                elif diploma_1_status == 1:
+                    # State 5: Show diploma download button
+                    keyboard = create_menu_keyboard_with_diploma(is_admin)
+                elif access_survey_1_status == 1:
+                    # State 4: Show final survey button
+                    keyboard = create_menu_keyboard_with_final_survey(is_admin)
+                elif practice_1_status == 1:
+                    # State 3: Show practice button
                     keyboard = create_menu_keyboard_after_test_passed(is_admin)
-                elif form_completed:
+                elif test_book_1_status == 1:
+                    # State 2: Show test button
                     keyboard = create_menu_keyboard_with_test(is_admin)
+                elif form_first_status == 1:
+                    # State 1: Show form button
+                    keyboard = create_menu_keyboard_with_form(is_admin)
                 else:
+                    # Fallback: show form button (new user)
                     keyboard = create_menu_keyboard_with_form(is_admin)
                 
                 await self.vk_api.send_message(
@@ -1748,30 +1873,13 @@ class WebServer:
                 # Handle course selection (1-4) when selecting user
                 if session["step"] == "select_course" and text in ["1", "2", "3", "4"]:
                     session["selected_course"] = int(text)
+                    session["step"] = "confirm_action"
                     
                     # Get selected user info
                     selected_user = await db.get_user(session["selected_user_id"])
                     user_name = selected_user.get("user_name", "Unknown") if selected_user else "Unknown"
                     
-                    # Check if practice is completed for this course
-                    practice_field = f"practice_{text}"
-                    practice_completed = selected_user.get(practice_field, False) if selected_user else False
-                    
-                    if not practice_completed:
-                        # Block access: practice not completed
-                        session["step"] = "confirm_action"
-                        msg_template = TEXTS_DATA.get("admin_practice_not_completed", "❌ Нельзя открыть доступ к финальной анкете!\n\nПользователь: {user_name}\nКурс: {course}\n\nПричина: Практика не сдана (Практика {course} = Нет)")
-                        await self.vk_api.send_message(
-                            user_id=user_id,
-                            message=msg_template.format(user_name=user_name, course=text),
-                            peer_id=peer_id,
-                            keyboard=create_admin_keyboard()
-                        )
-                        del ADMIN_SEARCH_SESSIONS[user_id]
-                        return
-                    
-                    session["step"] = "confirm_action"
-                    
+                    # Show access control options (no practice check needed)
                     msg_template = TEXTS_DATA.get("admin_access_action", "Выберите действие с доступом к финальной анкете после прохождения курса {course}:\n\nПользователь: {user_name}")
                     await self.vk_api.send_message(
                         user_id=user_id,
@@ -1787,8 +1895,8 @@ class WebServer:
                     target_user_id = session["selected_user_id"]
                     field_name = f"access_survey_{course}"
                     
-                    # Update database
-                    await db.update_user_field(target_user_id, field_name, True)
+                    # Update database: 1 = accessible (show button)
+                    await db.update_user_field(target_user_id, field_name, 1)
                     
                     # Get user info
                     target_user = await db.get_user(target_user_id)
@@ -1823,8 +1931,8 @@ class WebServer:
                     target_user_id = session["selected_user_id"]
                     field_name = f"access_survey_{course}"
                     
-                    # Update database
-                    await db.update_user_field(target_user_id, field_name, False)
+                    # Update database: 0 = inaccessible (hide button)
+                    await db.update_user_field(target_user_id, field_name, 0)
                     
                     # Get user info
                     target_user = await db.get_user(target_user_id)
@@ -1867,12 +1975,12 @@ class WebServer:
             
             # Handle "Финальное анкетирование" button
             if text.lower() == "финальное анкетирование":
-                # Determine which course the user has access to
+                # Determine which course the user has access to (access_survey_X == 1)
                 user_data = await db.get_user(user_id)
                 course = None
                 if user_data:
                     for c in range(1, 5):
-                        if user_data.get(f"access_survey_{c}"):
+                        if user_data.get(f"access_survey_{c}", 0) == 1:
                             course = c
                             break
                 
@@ -1970,14 +2078,14 @@ class WebServer:
                 except Exception as e:
                     print(f"Error getting user info: {e}", flush=True)
                 
-                # Update practice_1 in database
-                await db.update_user_field(user_id, "practice_1", True)
-                print(f"Practice 1 marked as completed for user {user_id}", flush=True)
+                # Update practice_1 in database: 2 = completed (button pressed)
+                await db.update_user_field(user_id, "practice_1", 2)
+                print(f"Practice 1 button clicked for user {user_id}, practice_1 set to 2", flush=True)
                 
-                # Notify all CHECK_TEST admins
+                # Notify all managers (CHECK_TEST_IDS) - need to open access to final survey
                 if CHECK_TEST_IDS:
                     user_link = f"[id{user_id}|{user_name}]"
-                    msg_template = TEXTS_DATA.get("practice_notification", "Пользователь {user_link} сдал(а) Практику в Курс 1 - используйте меню, чтобы открыть ему доступ к финальному анкетированию")
+                    msg_template = TEXTS_DATA.get("practice_notification", "🎯 Пользователь {user_link} сдал(а) Практику в Курс 1!\n\nОткройте доступ к финальному анкетированию через АДМИН → Открыть доступ к Анкете")
                     admin_message = msg_template.format(user_link=user_link)
                     for admin_id in CHECK_TEST_IDS:
                         try:
@@ -1985,26 +2093,26 @@ class WebServer:
                                 user_id=admin_id,
                                 message=admin_message
                             )
-                            print(f"Practice notification sent to admin {admin_id}", flush=True)
+                            print(f"Practice notification sent to manager {admin_id}", flush=True)
                         except Exception as e:
                             print(f"Failed to send practice notification to {admin_id}: {e}", flush=True)
                 
-                # Confirm to user
+                # Confirm to user - show main menu without practice button
                 await self.vk_api.send_message(
                     user_id=user_id,
                     message=TEXTS_DATA.get("practice_confirmed", "✅ Уведомление о сдаче практики отправлено менеджеру.\n\nОжидайте, вам откроют доступ к финальному анкетированию."),
                     peer_id=peer_id,
-                    keyboard=create_menu_keyboard_after_test_passed(is_admin)
+                    keyboard=create_main_menu_keyboard()
                 )
                 return
             
             # Handle "Анкета" button
             if text.lower() == "анкета":
-                # Check if user already completed form
+                # Check if user already completed form (form_first == 2)
                 user_data = await db.get_user(user_id)
-                form_completed = user_data.get("form_first", False) if user_data else False
+                form_first_status = user_data.get("form_first", 0) if user_data else 0
                 
-                if form_completed:
+                if form_first_status == 2:
                     await self.vk_api.send_message(
                         user_id=user_id,
                         message=TEXTS_DATA.get("form_already_completed", "Вы уже заполнили анкету!"),
@@ -2042,11 +2150,11 @@ class WebServer:
             
             # Handle "Тестирование" button
             if text.lower() == "тестирование":
-                # Check if user completed form
+                # Check if user has access to test (test_book_1 == 1)
                 user_data = await db.get_user(user_id)
-                form_completed = user_data.get("form_first", False) if user_data else False
+                test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
                 
-                if not form_completed:
+                if test_book_1_status != 1:
                     await self.vk_api.send_message(
                         user_id=user_id,
                         message=TEXTS_DATA.get("test_not_available", "Сначала необходимо заполнить анкету!"),
@@ -2056,6 +2164,38 @@ class WebServer:
                     return
                 
                 await self._start_test(user_id, peer_id)
+                return
+            
+            # Handle "Скачать диплом" button
+            if text.lower() == "скачать диплом":
+                # Check if user has diploma available (diploma_1 == 1)
+                user_data = await db.get_user(user_id)
+                diploma_status = None
+                course = None
+                if user_data:
+                    for c in range(1, 5):
+                        if user_data.get(f"diploma_{c}", 0) == 1:
+                            diploma_status = 1
+                            course = c
+                            break
+                
+                if diploma_status != 1:
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message="У вас нет доступного диплома.",
+                        peer_id=peer_id,
+                        keyboard=create_main_menu_keyboard()
+                    )
+                    return
+                
+                # TODO: Generate and send diploma
+                # For now, just show a message
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message=TEXTS_DATA.get("diploma_download", "🎓 Ваш диплом готов! Скоро он будет отправлен в чат."),
+                    peer_id=peer_id,
+                    keyboard=create_main_menu_keyboard()
+                )
                 return
             
             # Handle "Пройти заново" button
@@ -2374,18 +2514,18 @@ class WebServer:
         
         # Send result to user
         if passed:
-            # Update test_book_1 in database
-            await db.update_user_field(user_id, "test_book_1", True)
+            # Update test_book_1 in database: 2 = completed (test passed)
+            await db.update_user_field(user_id, "test_book_1", 2)
+            
+            # Set practice_1 = 1 to show "Сдал(а) практику" button
+            await db.update_user_field(user_id, "practice_1", 1)
             
             passed_text = TEXTS_DATA.get("test_passed", "🎉 Поздравляем! Вы сдали тест!")
             practice_info = "\n\nЕсли вы сдали практику - используйте кнопки Меню для уведомления менеджера. Он откроет вам доступ к финальному анкетированию и получению диплома о прохождении курса."
             message = f"{passed_text}\n\nВаш результат: {score}/{total}{practice_info}"
             
-            # Use keyboard with practice button
-            if has_final_survey_access:
-                keyboard = create_menu_keyboard_with_practice_and_survey(is_admin)
-            else:
-                keyboard = create_menu_keyboard_after_test_passed(is_admin)
+            # Use keyboard with practice button (practice_1 is now 1 = show button)
+            keyboard = create_menu_keyboard_after_test_passed(is_admin)
             
             await self.vk_api.send_message(
                 user_id=user_id,
@@ -2480,7 +2620,8 @@ class WebServer:
         # Update user in database: name, answers, form completed
         await db.update_user_field(user_id, "user_name", user_name)
         await db.update_user_field(user_id, "form_first_answer", form_answer)
-        await db.update_user_field(user_id, "form_first", True)
+        await db.update_user_field(user_id, "form_first", 2)  # 2 = completed
+        await db.update_user_field(user_id, "test_book_1", 1)  # 1 = accessible (show test button)
         
         print(f"Form completed for user {user_id}, name: {user_name}", flush=True)
         
@@ -2505,20 +2646,21 @@ class WebServer:
             keyboard=create_menu_keyboard_with_test(is_admin)
         )
         
-        # Notify admin about form completion with full answers
-        if USER_ADMIN_ID:
+        # Notify marketers (CHECK_TEST_IDS) about form completion with full answers
+        if CHECK_TEST_IDS:
             # Create clickable link to user profile
             user_link = f"[id{user_id}|{user_name}]"
-            admin_message = f"Пользователь {user_link}, прошел анкетирование!\n\n{form_answer}"
+            admin_message = f"📋 Пользователь {user_link} заполнил приветственную анкету!\n\n{form_answer}"
             
-            try:
-                await self.vk_api.send_message(
-                    user_id=USER_ADMIN_ID,
-                    message=admin_message
-                )
-                print(f"Admin notification sent about form completion by user {user_id}", flush=True)
-            except Exception as e:
-                print(f"Failed to send admin notification: {e}", flush=True)
+            for admin_id in CHECK_TEST_IDS:
+                try:
+                    await self.vk_api.send_message(
+                        user_id=admin_id,
+                        message=admin_message
+                    )
+                    print(f"Marketer notification sent about form completion by user {user_id} to {admin_id}", flush=True)
+                except Exception as e:
+                    print(f"Failed to send notification to {admin_id}: {e}", flush=True)
         
         # Clear form session
         del FORM_SESSIONS[user_id]
@@ -2557,13 +2699,26 @@ class WebServer:
 
     async def _start_final_form(self, user_id: int, peer_id: int, course: int) -> None:
         """Start final form for user."""
-        # Check if user already completed this form
+        # Check if user already completed this form (access_survey_X == 2)
         user_data = await db.get_user(user_id)
-        form_field = f"form_end_{course}"
-        if user_data and user_data.get(form_field):
+        access_field = f"access_survey_{course}"
+        access_status = user_data.get(access_field, 0) if user_data else 0
+        
+        if access_status == 2:
+            # Already completed
             await self.vk_api.send_message(
                 user_id=user_id,
                 message=TEXTS_DATA.get("final_form_already_completed", "Вы уже заполнили финальную анкету для этого курса!"),
+                peer_id=peer_id,
+                keyboard=create_main_menu_keyboard()
+            )
+            return
+        
+        if access_status != 1:
+            # No access
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message="У вас нет доступа к финальному анкетированию.",
                 peer_id=peer_id,
                 keyboard=create_main_menu_keyboard()
             )
@@ -2594,10 +2749,11 @@ class WebServer:
         FINAL_FORM_SESSIONS[user_id] = {
             "course": course,
             "step": "question",
-            "current_question": 1,
+            "current_question": "start",  # Start with "Начать" button
             "answers": {},
             "user_name": user_name,
             "user_name_case": user_name_case,
+            "ФИ_датпад": user_data.get("ФИ_датпад", "") if user_data else "",
             "need_case_update": False
         }
         
@@ -2626,6 +2782,8 @@ class WebServer:
             question_text = question_text.replace("{user_name}", session.get("user_name", ""))
         if "{user_name_case}" in question_text:
             question_text = question_text.replace("{user_name_case}", session.get("user_name_case", ""))
+        if "{ФИ_датпад}" in question_text:
+            question_text = question_text.replace("{ФИ_датпад}", session.get("ФИ_датпад", ""))
         
         # Send question text without prefix
         message = question_text
@@ -2635,7 +2793,21 @@ class WebServer:
             keyboard = create_final_form_open_keyboard()
         elif question_type == "buttons":
             buttons = question.get("buttons", [])
-            if buttons == ["Да", "Нет"]:
+            if buttons == ["Начать"]:
+                # Special keyboard for start button
+                keyboard = {
+                    "one_time": False,
+                    "inline": False,
+                    "buttons": [
+                        [
+                            {
+                                "action": {"type": "text", "label": "Начать"},
+                                "color": "positive"
+                            }
+                        ]
+                    ]
+                }
+            elif buttons == ["Да", "Нет"]:
                 keyboard = create_yes_no_keyboard()
             elif "Не знаю" in buttons:
                 keyboard = create_yes_no_unknown_keyboard()
@@ -2682,6 +2854,8 @@ class WebServer:
                 session["user_name"] = answer
             elif update_field == "user_name_case":
                 session["user_name_case"] = answer
+            elif update_field == "ФИ_датпад":
+                session["ФИ_датпад"] = answer
         
         # Handle special case: check_need_case_update
         next_question = get_next_question_id(question_id, answer)
@@ -2775,9 +2949,13 @@ class WebServer:
         form_field = f"form_end_{course}"
         await db.update_user_field(user_id, form_field, answers_text)
         
-        # Update course completed flag
-        course_field = f"course_{course}"
-        await db.update_user_field(user_id, course_field, True)
+        # Update status: access_survey_X = 2 (completed)
+        access_field = f"access_survey_{course}"
+        await db.update_user_field(user_id, access_field, 2)
+        
+        # Make diploma accessible: diploma_X = 1
+        diploma_field = f"diploma_{course}"
+        await db.update_user_field(user_id, diploma_field, 1)
         
         print(f"Final form completed for user {user_id}, course {course}", flush=True)
         
@@ -2790,12 +2968,14 @@ class WebServer:
             keyboard=create_main_menu_keyboard()
         )
         
-        # Notify admins
+        # TODO: Send diploma to user's chat
+        
+        # Notify marketers (CHECK_TEST_IDS)
         if CHECK_TEST_IDS:
             user_data = await db.get_user(user_id)
             user_name = user_data.get("user_name", f"ID{user_id}") if user_data else f"ID{user_id}"
             user_link = f"[id{user_id}|{user_name}]"
-            msg_template = TEXTS_DATA.get("final_form_admin_notification", "📋 Пользователь {user_link} заполнил финальную анкету курса {course}!\n\n{form_answers}")
+            msg_template = TEXTS_DATA.get("final_form_admin_notification", "🎓 Пользователь {user_link} завершил Курс {course}!\n\n{form_answers}")
             admin_message = msg_template.format(user_link=user_link, course=course, form_answers=answers_text)
             for admin_id in CHECK_TEST_IDS:
                 try:
@@ -2804,7 +2984,7 @@ class WebServer:
                         message=admin_message
                     )
                 except Exception as e:
-                    print(f"Failed to notify admin {admin_id}: {e}", flush=True)
+                    print(f"Failed to notify marketer {admin_id}: {e}", flush=True)
         
         # Clear session
         del FINAL_FORM_SESSIONS[user_id]
