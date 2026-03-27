@@ -825,6 +825,12 @@ def create_admin_keyboard() -> Dict:
             ],
             [
                 {
+                    "action": {"type": "text", "label": "Сырые данные"},
+                    "color": "negative"
+                }
+            ],
+            [
+                {
                     "action": {"type": "text", "label": "Меню"},
                     "color": "secondary"
                 }
@@ -2074,6 +2080,11 @@ class WebServer:
                 await self._handle_sync_users(user_id, peer_id)
                 return
             
+            # Handle "Сырые данные" button - show raw database values
+            if text.lower() == "сырые данные" and is_admin:
+                await self._handle_raw_data(user_id, peer_id)
+                return
+            
             # Handle "Открыть доступ к Анкете" button
             if text.lower() == "открыть доступ к анкете" and is_admin:
                 # Clear any existing admin search session
@@ -2679,6 +2690,73 @@ class WebServer:
             await self.vk_api.send_message(
                 user_id=user_id,
                 message=msg_template.format(error=e),
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
+
+    async def _handle_raw_data(self, user_id: int, peer_id: int) -> None:
+        """Show raw database values for current admin user."""
+        print(f"Raw data request from admin {user_id}", flush=True)
+        
+        try:
+            # Get current user data from database
+            user_data = await db.get_user(user_id)
+            
+            if not user_data:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="❌ Пользователь не найден в базе данных.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                return
+            
+            # Build raw data message - show actual integer values
+            message = "📊 СЫРЫЕ ДАННЫЕ ИЗ БД:\n"
+            message += f"━━━━━━━━━━━━━━━━━━━━\n"
+            message += f"user_id: {user_data.get('user_id', 'NULL')}\n"
+            message += f"user_name: {user_data.get('user_name', 'NULL')}\n"
+            message += f"━━━━━━━━━━━━━━━━━━━━\n"
+            message += f"form_first: {user_data.get('form_first', 'NULL')}\n"
+            message += f"test_book_1: {user_data.get('test_book_1', 'NULL')}\n"
+            message += f"test_book_2: {user_data.get('test_book_2', 'NULL')}\n"
+            message += f"test_book_3: {user_data.get('test_book_3', 'NULL')}\n"
+            message += f"test_book_4: {user_data.get('test_book_4', 'NULL')}\n"
+            message += f"━━━━━━━━━━━━━━━━━━━━\n"
+            message += f"practice_1: {user_data.get('practice_1', 'NULL')}\n"
+            message += f"practice_2: {user_data.get('practice_2', 'NULL')}\n"
+            message += f"practice_3: {user_data.get('practice_3', 'NULL')}\n"
+            message += f"practice_4: {user_data.get('practice_4', 'NULL')}\n"
+            message += f"━━━━━━━━━━━━━━━━━━━━\n"
+            message += f"access_survey_1: {user_data.get('access_survey_1', 'NULL')}\n"
+            message += f"access_survey_2: {user_data.get('access_survey_2', 'NULL')}\n"
+            message += f"access_survey_3: {user_data.get('access_survey_3', 'NULL')}\n"
+            message += f"access_survey_4: {user_data.get('access_survey_4', 'NULL')}\n"
+            message += f"━━━━━━━━━━━━━━━━━━━━\n"
+            message += f"diploma_1: {user_data.get('diploma_1', 'NULL')}\n"
+            message += f"diploma_2: {user_data.get('diploma_2', 'NULL')}\n"
+            message += f"diploma_3: {user_data.get('diploma_3', 'NULL')}\n"
+            message += f"diploma_4: {user_data.get('diploma_4', 'NULL')}\n"
+            message += f"━━━━━━━━━━━━━━━━━━━━\n"
+            message += f"fortune_wheel: {user_data.get('fortune_wheel', 'NULL')}\n"
+            message += f"━━━━━━━━━━━━━━━━━━━━\n"
+            message += "📝 Легенда:\n"
+            message += "0 = заблокировано\n"
+            message += "1 = доступно (кнопка)\n"
+            message += "2 = выполнено"
+            
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=message,
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
+            
+        except Exception as e:
+            print(f"Error handling raw data: {e}", flush=True)
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=f"❌ Ошибка: {e}",
                 peer_id=peer_id,
                 keyboard=create_admin_keyboard()
             )
