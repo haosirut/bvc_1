@@ -408,6 +408,101 @@ class Database:
         except Exception as e:
             print(f"Error searching users by name '{search_text}': {e}", flush=True)
             return []
+    
+    async def import_users(self, users: List[Dict]) -> Dict:
+        """Import/update users from list. Returns stats: {created, updated, errors}."""
+        if not self.pool:
+            return {"created": 0, "updated": 0, "errors": 1, "message": "No database connection"}
+        
+        stats = {"created": 0, "updated": 0, "errors": 0}
+        
+        async with self.pool.acquire() as conn:
+            for user in users:
+                try:
+                    user_id = user.get("user_id")
+                    if not user_id:
+                        stats["errors"] += 1
+                        continue
+                    
+                    # Check if user exists
+                    existing = await conn.fetchval(
+                        "SELECT user_id FROM users WHERE user_id = $1", user_id
+                    )
+                    
+                    if existing:
+                        # Update existing user
+                        await conn.execute('''
+                            UPDATE users SET
+                                user_name = $2,
+                                user_name_case = $3,
+                                form_first = $4,
+                                form_first_answer = $5,
+                                fortune_wheel = $6,
+                                test_book_1 = $7, test_book_2 = $8, test_book_3 = $9, test_book_4 = $10,
+                                practice_1 = $11, practice_2 = $12, practice_3 = $13, practice_4 = $14,
+                                access_survey_1 = $15, access_survey_2 = $16, access_survey_3 = $17, access_survey_4 = $18,
+                                form_end_1 = $19, form_end_2 = $20, form_end_3 = $21, form_end_4 = $22,
+                                diploma_1 = $23, diploma_2 = $24, diploma_3 = $25, diploma_4 = $26,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE user_id = $1
+                        ''',
+                            user_id,
+                            user.get("user_name", ""),
+                            user.get("user_name_case", ""),
+                            user.get("form_first", 0),
+                            user.get("form_first_answer", ""),
+                            user.get("fortune_wheel", 0),
+                            user.get("test_book_1", 0), user.get("test_book_2", 0),
+                            user.get("test_book_3", 0), user.get("test_book_4", 0),
+                            user.get("practice_1", 0), user.get("practice_2", 0),
+                            user.get("practice_3", 0), user.get("practice_4", 0),
+                            user.get("access_survey_1", 0), user.get("access_survey_2", 0),
+                            user.get("access_survey_3", 0), user.get("access_survey_4", 0),
+                            user.get("form_end_1", ""), user.get("form_end_2", ""),
+                            user.get("form_end_3", ""), user.get("form_end_4", ""),
+                            user.get("diploma_1", 0), user.get("diploma_2", 0),
+                            user.get("diploma_3", 0), user.get("diploma_4", 0)
+                        )
+                        stats["updated"] += 1
+                    else:
+                        # Create new user
+                        await conn.execute('''
+                            INSERT INTO users (
+                                user_id, user_name, user_name_case,
+                                form_first, form_first_answer, fortune_wheel,
+                                test_book_1, test_book_2, test_book_3, test_book_4,
+                                practice_1, practice_2, practice_3, practice_4,
+                                access_survey_1, access_survey_2, access_survey_3, access_survey_4,
+                                form_end_1, form_end_2, form_end_3, form_end_4,
+                                diploma_1, diploma_2, diploma_3, diploma_4
+                            ) VALUES (
+                                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+                            )
+                        ''',
+                            user_id,
+                            user.get("user_name", ""),
+                            user.get("user_name_case", ""),
+                            user.get("form_first", 0),
+                            user.get("form_first_answer", ""),
+                            user.get("fortune_wheel", 0),
+                            user.get("test_book_1", 0), user.get("test_book_2", 0),
+                            user.get("test_book_3", 0), user.get("test_book_4", 0),
+                            user.get("practice_1", 0), user.get("practice_2", 0),
+                            user.get("practice_3", 0), user.get("practice_4", 0),
+                            user.get("access_survey_1", 0), user.get("access_survey_2", 0),
+                            user.get("access_survey_3", 0), user.get("access_survey_4", 0),
+                            user.get("form_end_1", ""), user.get("form_end_2", ""),
+                            user.get("form_end_3", ""), user.get("form_end_4", ""),
+                            user.get("diploma_1", 0), user.get("diploma_2", 0),
+                            user.get("diploma_3", 0), user.get("diploma_4", 0)
+                        )
+                        stats["created"] += 1
+                        
+                except Exception as e:
+                    print(f"Error importing user {user.get('user_id')}: {e}", flush=True)
+                    stats["errors"] += 1
+        
+        return stats
 
 # Global database instance
 db = Database()
@@ -604,6 +699,22 @@ class VKAPI:
         except Exception as e:
             print(f"Error sending document: {e}", flush=True)
             return False
+    
+    async def download_document(self, url: str) -> Optional[bytes]:
+        """Download document from VK by URL."""
+        if not self.session:
+            await self.init()
+        
+        try:
+            async with self.session.get(url) as resp:
+                if resp.status == 200:
+                    return await resp.read()
+                else:
+                    print(f"Failed to download document: status {resp.status}", flush=True)
+                    return None
+        except Exception as e:
+            print(f"Error downloading document: {e}", flush=True)
+            return None
 
 
 # -----------------------------------------------------------------------------
@@ -696,7 +807,13 @@ def create_admin_keyboard() -> Dict:
             ],
             [
                 {
-                    "action": {"type": "text", "label": "Обновление базы"},
+                    "action": {"type": "text", "label": "Загрузить базу"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Синхронизация"},
                     "color": "primary"
                 }
             ],
@@ -1423,25 +1540,25 @@ def create_users_xlsx(users: List[Dict]) -> bytes:
         "Практика 1",
         "Доступ к анкете 1",
         "Ответ анкеты 1",
-        "Курс 1",
+        "Диплом 1",
         # Курс 2
         "Тест 2",
         "Практика 2",
         "Доступ к анкете 2",
         "Ответ анкеты 2",
-        "Курс 2",
+        "Диплом 2",
         # Курс 3
         "Тест 3",
         "Практика 3",
         "Доступ к анкете 3",
         "Ответ анкеты 3",
-        "Курс 3",
+        "Диплом 3",
         # Курс 4
         "Тест 4",
         "Практика 4",
         "Доступ к анкете 4",
         "Ответ анкеты 4",
-        "Курс 4",
+        "Диплом 4",
         # Даты
         "Дата создания",
         "Дата обновления"
@@ -1468,9 +1585,21 @@ def create_users_xlsx(users: List[Dict]) -> bytes:
     
     # Write data
     for row_num, user in enumerate(users, 2):
-        # Convert boolean values to Russian
-        def bool_ru(val):
-            return "Да" if val else "Нет"
+        # Convert INTEGER status to Russian text
+        # 0 = Нет, 1 = Доступен, 2 = Выполнено
+        def status_ru(val):
+            try:
+                v = int(val) if val is not None else 0
+                if v == 0:
+                    return "Нет"
+                elif v == 1:
+                    return "Доступен"
+                elif v == 2:
+                    return "Выполнено"
+                else:
+                    return str(v)
+            except:
+                return str(val) if val else "Нет"
         
         def format_datetime(dt):
             if dt:
@@ -1483,33 +1612,33 @@ def create_users_xlsx(users: List[Dict]) -> bytes:
             user.get("user_id", ""),
             user.get("user_name", ""),
             user.get("user_name_case", ""),
-            bool_ru(user.get("form_first", False)),
+            status_ru(user.get("form_first", 0)),
             user.get("form_first_answer", ""),
             user.get("fortune_wheel", 0),
             # Курс 1
-            bool_ru(user.get("test_book_1", False)),
-            bool_ru(user.get("practice_1", False)),
-            bool_ru(user.get("access_survey_1", False)),
+            status_ru(user.get("test_book_1", 0)),
+            status_ru(user.get("practice_1", 0)),
+            status_ru(user.get("access_survey_1", 0)),
             user.get("form_end_1", ""),
-            bool_ru(user.get("course_1", False)),
+            status_ru(user.get("diploma_1", 0)),
             # Курс 2
-            bool_ru(user.get("test_book_2", False)),
-            bool_ru(user.get("practice_2", False)),
-            bool_ru(user.get("access_survey_2", False)),
+            status_ru(user.get("test_book_2", 0)),
+            status_ru(user.get("practice_2", 0)),
+            status_ru(user.get("access_survey_2", 0)),
             user.get("form_end_2", ""),
-            bool_ru(user.get("course_2", False)),
+            status_ru(user.get("diploma_2", 0)),
             # Курс 3
-            bool_ru(user.get("test_book_3", False)),
-            bool_ru(user.get("practice_3", False)),
-            bool_ru(user.get("access_survey_3", False)),
+            status_ru(user.get("test_book_3", 0)),
+            status_ru(user.get("practice_3", 0)),
+            status_ru(user.get("access_survey_3", 0)),
             user.get("form_end_3", ""),
-            bool_ru(user.get("course_3", False)),
+            status_ru(user.get("diploma_3", 0)),
             # Курс 4
-            bool_ru(user.get("test_book_4", False)),
-            bool_ru(user.get("practice_4", False)),
-            bool_ru(user.get("access_survey_4", False)),
+            status_ru(user.get("test_book_4", 0)),
+            status_ru(user.get("practice_4", 0)),
+            status_ru(user.get("access_survey_4", 0)),
             user.get("form_end_4", ""),
-            bool_ru(user.get("course_4", False)),
+            status_ru(user.get("diploma_4", 0)),
             # Даты
             format_datetime(user.get("created_at", "")),
             format_datetime(user.get("updated_at", ""))
@@ -1521,9 +1650,8 @@ def create_users_xlsx(users: List[Dict]) -> bytes:
             cell.alignment = Alignment(vertical="center", wrap_text=True)
     
     # Adjust column widths
-    column_widths = [15, 25, 25, 15, 40, 12, 10, 10, 15, 40, 10, 10, 10, 15, 40, 10, 10, 10, 15, 40, 10, 10, 10, 15, 40, 10, 20, 20]
+    column_widths = [15, 25, 25, 12, 40, 12, 12, 12, 15, 40, 10, 12, 12, 15, 40, 10, 12, 12, 15, 40, 10, 12, 12, 15, 40, 10, 20, 20]
     for col, width in enumerate(column_widths, 1):
-        col_letter = chr(64 + col) if col <= 26 else f"A{chr(64 + col - 26)}" if col <= 52 else f"B{chr(64 + col - 52)}"
         if col <= 26:
             col_letter = chr(64 + col)
         elif col <= 52:
@@ -1540,6 +1668,78 @@ def create_users_xlsx(users: List[Dict]) -> bytes:
     wb.save(output)
     output.seek(0)
     return output.getvalue()
+
+
+def parse_users_xlsx(file_data: bytes) -> List[Dict]:
+    """Parse XLSX file and return list of user dicts for database update."""
+    from openpyxl import load_workbook
+    
+    wb = load_workbook(io.BytesIO(file_data))
+    ws = wb.active
+    
+    # Get headers from first row
+    headers = [cell.value for cell in ws[1]]
+    
+    # Map headers to column indices
+    header_map = {h: i for i, h in enumerate(headers) if h}
+    
+    # Parse status from Russian text to INTEGER
+    def parse_status(val):
+        if val is None:
+            return 0
+        val_str = str(val).strip()
+        if val_str == "Выполнено" or val_str == "Да":
+            return 2
+        elif val_str == "Доступен":
+            return 1
+        elif val_str == "Нет":
+            return 0
+        else:
+            try:
+                return int(val_str)
+            except:
+                return 0
+    
+    users = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row[0]:  # Skip empty rows
+            continue
+        
+        user = {
+            "user_id": row[header_map.get("ID пользователя", 0)],
+            "user_name": row[header_map.get("Имя", 1)] or "",
+            "user_name_case": row[header_map.get("Имя в падеже", 2)] or "",
+            "form_first": parse_status(row[header_map.get("Начальная анкета", 3)]),
+            "form_first_answer": row[header_map.get("Ответ нач. анкеты", 4)] or "",
+            "fortune_wheel": int(row[header_map.get("Колесо фортуны", 5)] or 0),
+            # Курс 1
+            "test_book_1": parse_status(row[header_map.get("Тест 1", 6)]),
+            "practice_1": parse_status(row[header_map.get("Практика 1", 7)]),
+            "access_survey_1": parse_status(row[header_map.get("Доступ к анкете 1", 8)]),
+            "form_end_1": row[header_map.get("Ответ анкеты 1", 9)] or "",
+            "diploma_1": parse_status(row[header_map.get("Диплом 1", 10)]),
+            # Курс 2
+            "test_book_2": parse_status(row[header_map.get("Тест 2", 11)]),
+            "practice_2": parse_status(row[header_map.get("Практика 2", 12)]),
+            "access_survey_2": parse_status(row[header_map.get("Доступ к анкете 2", 13)]),
+            "form_end_2": row[header_map.get("Ответ анкеты 2", 14)] or "",
+            "diploma_2": parse_status(row[header_map.get("Диплом 2", 15)]),
+            # Курс 3
+            "test_book_3": parse_status(row[header_map.get("Тест 3", 16)]),
+            "practice_3": parse_status(row[header_map.get("Практика 3", 17)]),
+            "access_survey_3": parse_status(row[header_map.get("Доступ к анкете 3", 18)]),
+            "form_end_3": row[header_map.get("Ответ анкеты 3", 19)] or "",
+            "diploma_3": parse_status(row[header_map.get("Диплом 3", 20)]),
+            # Курс 4
+            "test_book_4": parse_status(row[header_map.get("Тест 4", 21)]),
+            "practice_4": parse_status(row[header_map.get("Практика 4", 22)]),
+            "access_survey_4": parse_status(row[header_map.get("Доступ к анкете 4", 23)]),
+            "form_end_4": row[header_map.get("Ответ анкеты 4", 24)] or "",
+            "diploma_4": parse_status(row[header_map.get("Диплом 4", 25)]),
+        }
+        users.append(user)
+    
+    return users
 
 
 # -----------------------------------------------------------------------------
@@ -1620,11 +1820,62 @@ class WebServer:
             user_id = message.get("from_id", message.get("user_id", 0))
             peer_id = message.get("peer_id", user_id)
             text = message.get("text", "").strip()
+            attachments = message.get("attachments", [])
             
             print(f"User {user_id}: {text}", flush=True)
+            if attachments:
+                print(f"Attachments: {len(attachments)}", flush=True)
             
             # Check if user is admin
             is_admin = (user_id == USER_ADMIN_ID)
+            
+            # Handle file upload for admin (Excel import)
+            if is_admin and attachments:
+                # Check if admin is expecting file upload
+                admin_session = ADMIN_SEARCH_SESSIONS.get(user_id, {})
+                if admin_session.get("step") == "awaiting_file_upload":
+                    # Find xlsx attachment
+                    for att in attachments:
+                        if att.get("type") == "doc":
+                            doc = att.get("doc", {})
+                            filename = doc.get("title", "")
+                            ext = doc.get("ext", "")
+                            url = doc.get("url", "")
+                            
+                            print(f"Document: {filename}, ext: {ext}", flush=True)
+                            
+                            if ext == "xlsx" or filename.endswith(".xlsx"):
+                                # Download file
+                                await self.vk_api.send_message(
+                                    user_id=user_id,
+                                    message="⏳ Загружаю и обрабатываю файл...",
+                                    peer_id=peer_id
+                                )
+                                
+                                file_data = await self.vk_api.download_document(url)
+                                if file_data:
+                                    await self._handle_import_db(user_id, peer_id, file_data, filename)
+                                else:
+                                    await self.vk_api.send_message(
+                                        user_id=user_id,
+                                        message="❌ Не удалось скачать файл.",
+                                        peer_id=peer_id,
+                                        keyboard=create_admin_keyboard()
+                                    )
+                                
+                                # Clear admin session
+                                if user_id in ADMIN_SEARCH_SESSIONS:
+                                    del ADMIN_SEARCH_SESSIONS[user_id]
+                                return
+                    
+                    # No xlsx found
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message="❌ Файл не найден или неверный формат. Пожалуйста, отправьте файл .xlsx",
+                        peer_id=peer_id,
+                        keyboard=create_admin_keyboard()
+                    )
+                    return
             
             # Handle "Start" button
             if text.lower() in ["начать", "start", "/start"]:
@@ -1794,7 +2045,31 @@ class WebServer:
                 await self._handle_download_db(user_id, peer_id)
                 return
             
-            # Handle "Обновление базы" button
+            # Handle "Загрузить базу" button
+            if text.lower() == "загрузить базу" and is_admin:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="📤 Для загрузки базы данных отправьте Excel файл (.xlsx) в этот чат.\n\nФайл должен иметь ту же структуру, что и скачанный файл базы.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                # Set admin session to expect file upload
+                ADMIN_SEARCH_SESSIONS[user_id] = {
+                    "step": "awaiting_file_upload",
+                    "search_text": "",
+                    "results": [],
+                    "page": 0,
+                    "selected_user_id": None,
+                    "selected_course": None
+                }
+                return
+            
+            # Handle "Синхронизация" button (renamed from "Обновление базы")
+            if text.lower() == "синхронизация" and is_admin:
+                await self._handle_sync_users(user_id, peer_id)
+                return
+            
+            # Handle "Обновление базы" button (legacy, for backwards compatibility)
             if text.lower() == "обновление базы" and is_admin:
                 await self._handle_sync_users(user_id, peer_id)
                 return
@@ -2275,6 +2550,52 @@ class WebServer:
             await self.vk_api.send_message(
                 user_id=user_id,
                 message=msg_template.format(error=e),
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
+
+    async def _handle_import_db(self, user_id: int, peer_id: int, file_data: bytes, filename: str) -> None:
+        """Handle Excel file import - update database from uploaded xlsx."""
+        print(f"Import DB from file: {filename}", flush=True)
+        
+        try:
+            # Parse xlsx file
+            users = parse_users_xlsx(file_data)
+            
+            if not users:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="❌ Не удалось прочитать файл или файл пуст.",
+                    peer_id=peer_id,
+                    keyboard=create_admin_keyboard()
+                )
+                return
+            
+            print(f"Parsed {len(users)} users from file", flush=True)
+            
+            # Import users to database
+            stats = await db.import_users(users)
+            
+            # Send result
+            message = f"✅ Импорт завершён!\n\n"
+            message += f"📊 Обработано записей: {len(users)}\n"
+            message += f"➕ Создано новых: {stats['created']}\n"
+            message += f"✏️ Обновлено: {stats['updated']}\n"
+            if stats['errors'] > 0:
+                message += f"⚠️ Ошибок: {stats['errors']}"
+            
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=message,
+                peer_id=peer_id,
+                keyboard=create_admin_keyboard()
+            )
+            
+        except Exception as e:
+            print(f"Error handling import DB: {e}", flush=True)
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=f"❌ Ошибка при импорте: {e}",
                 peer_id=peer_id,
                 keyboard=create_admin_keyboard()
             )
