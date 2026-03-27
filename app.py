@@ -222,46 +222,46 @@ class Database:
                 #   - test_book_X = 2 → practice_X = 1
                 #   - access_survey_X = 1 (opened by manager), = 2 (completed)
                 
-                try:
-                    # Step 1: Convert BOOLEAN to INTEGER (Да = 2, Нет = 0)
-                    # Migrate form_first: TRUE → 2, FALSE → 0
-                    await conn.execute('''UPDATE users SET form_first = 2 WHERE form_first = TRUE OR form_first = 't'::boolean''')
-                    await conn.execute('''UPDATE users SET form_first = 0 WHERE form_first = FALSE OR form_first = 'f'::boolean''')
-                    print("Migration: form_first converted", flush=True)
-                except Exception as e:
-                    print(f"Migration form_first: {e}", flush=True)
+                # Step 0: Alter column types from BOOLEAN to INTEGER
+                boolean_columns = [
+                    ("form_first", 1),  # default value for new users
+                    ("test_book_1", 0),
+                    ("test_book_2", 0),
+                    ("test_book_3", 0),
+                    ("test_book_4", 0),
+                    ("practice_1", 0),
+                    ("practice_2", 0),
+                    ("practice_3", 0),
+                    ("practice_4", 0),
+                    ("access_survey_1", 0),
+                    ("access_survey_2", 0),
+                    ("access_survey_3", 0),
+                    ("access_survey_4", 0),
+                ]
                 
-                try:
-                    # Migrate test_book_X: TRUE → 2, FALSE → 0
-                    for i in range(1, 5):
-                        await conn.execute(f'''UPDATE users SET test_book_{i} = 2 WHERE test_book_{i} = TRUE OR test_book_{i} = 't'::boolean''')
-                        await conn.execute(f'''UPDATE users SET test_book_{i} = 0 WHERE test_book_{i} = FALSE OR test_book_{i} = 'f'::boolean''')
-                    print("Migration: test_book_X converted", flush=True)
-                except Exception as e:
-                    print(f"Migration test_book_X: {e}", flush=True)
+                for col_name, default_val in boolean_columns:
+                    try:
+                        # Check if column is boolean type
+                        col_type = await conn.fetchval(
+                            "SELECT data_type FROM information_schema.columns WHERE table_name = 'users' AND column_name = $1",
+                            col_name
+                        )
+                        if col_type == 'boolean':
+                            # Alter column type: TRUE -> 2, FALSE -> 0, NULL -> default
+                            await conn.execute(f'''
+                                ALTER TABLE users ALTER COLUMN {col_name} TYPE INTEGER 
+                                USING CASE WHEN {col_name} = TRUE THEN 2 
+                                           WHEN {col_name} = FALSE THEN 0 
+                                           ELSE {default_val} END
+                            ''')
+                            print(f"Migration: {col_name} type changed from boolean to integer", flush=True)
+                    except Exception as e:
+                        print(f"Migration alter {col_name}: {e}", flush=True)
                 
+                # Step 1: Apply state transition logic (after type conversion)
                 try:
-                    # Migrate practice_X: TRUE → 2, FALSE → 0
-                    for i in range(1, 5):
-                        await conn.execute(f'''UPDATE users SET practice_{i} = 2 WHERE practice_{i} = TRUE OR practice_{i} = 't'::boolean''')
-                        await conn.execute(f'''UPDATE users SET practice_{i} = 0 WHERE practice_{i} = FALSE OR practice_{i} = 'f'::boolean''')
-                    print("Migration: practice_X converted", flush=True)
-                except Exception as e:
-                    print(f"Migration practice_X: {e}", flush=True)
-                
-                try:
-                    # Migrate access_survey_X: TRUE → 1 (was opened), FALSE → 0
-                    for i in range(1, 5):
-                        await conn.execute(f'''UPDATE users SET access_survey_{i} = 1 WHERE access_survey_{i} = TRUE OR access_survey_{i} = 't'::boolean''')
-                        await conn.execute(f'''UPDATE users SET access_survey_{i} = 0 WHERE access_survey_{i} = FALSE OR access_survey_{i} = 'f'::boolean''')
-                    print("Migration: access_survey_X converted", flush=True)
-                except Exception as e:
-                    print(f"Migration access_survey_X: {e}", flush=True)
-                
-                # Step 2: Apply state transition logic
-                try:
-                    # If form_first = 2 (completed), set test_book_1 = 1 (accessible)
-                    # But only if test_book_1 is not already 2 (completed)
+                    # If form_first = 2 (completed), set test_book_X = 1 (accessible)
+                    # But only if test_book_X is not already 2 (completed)
                     for i in range(1, 5):
                         await conn.execute(f'''UPDATE users SET test_book_{i} = 1 WHERE form_first = 2 AND test_book_{i} = 0''')
                     print("Migration: test_book_X transition applied", flush=True)
@@ -1325,9 +1325,13 @@ def get_correct_answer_text(question: Dict) -> str:
 def get_final_form_question(question_id) -> Optional[Dict]:
     """Get question from final form by ID (int or str)."""
     questions = FINAL_FORM_DATA.get("questions", [])
+    print(f"get_final_form_question: looking for id={question_id}, questions count={len(questions)}", flush=True)
     for q in questions:
-        if str(q.get("id")) == str(question_id):
+        qid = q.get("id")
+        if str(qid) == str(question_id):
+            print(f"Found question: id={qid}, type={q.get('type')}", flush=True)
             return q
+    print(f"Question not found: {question_id}. Available ids: {[q.get('id') for q in questions]}", flush=True)
     return None
 
 
@@ -2842,9 +2846,8 @@ class WebServer:
         if not question:
             return
         
-        # Save answer
-        save_as = question.get("save_as", f"question_{question_id}")
-        session["answers"][save_as] = answer
+        # Save answer using question_id as key (for proper formatting in finish)
+        session["answers"][question_id] = answer
         
         # Check if this question updates user fields
         update_field = question.get("update_field")
@@ -2900,9 +2903,9 @@ class WebServer:
             except ValueError:
                 return  # Not a number, ignore
         
-        # Save answer
-        save_as = question.get("save_as", f"question_{question_id}")
-        session["answers"][save_as] = button
+        # Save answer using question_id as key (skip "start" button - not a real answer)
+        if question_id != "start":
+            session["answers"][question_id] = button
         
         # Get next question
         next_question = get_next_question_id(question_id, button)
@@ -2937,12 +2940,49 @@ class WebServer:
             return
         
         course = session["course"]
-        answers = session["answers"]
+        answers = session["answers"]  # Format: {question_id: answer}
         
-        # Format answers
+        # Build question texts dictionary for formatting
+        question_texts = {}
+        for q in FINAL_FORM_DATA.get("questions", []):
+            qid = q.get("id")
+            qtext = q.get("question", "")
+            # Remove variable placeholders for storage
+            qtext_clean = qtext.replace("{user_name}", "").replace("{user_name_case}", "").replace("{ФИ_датпад}", "").strip()
+            question_texts[qid] = qtext_clean
+        
+        # Format answers with question text (same format as initial form)
+        # Sort by question id - numeric first, then alphanumeric
+        def sort_key(qid):
+            if isinstance(qid, int):
+                return (0, qid)
+            try:
+                # Try to extract numeric part (e.g., "2a" -> 2.1)
+                num_part = ""
+                for c in str(qid):
+                    if c.isdigit():
+                        num_part += c
+                    else:
+                        break
+                if num_part:
+                    return (0, int(num_part))
+                return (1, str(qid))
+            except:
+                return (1, str(qid))
+        
+        sorted_qids = sorted(answers.keys(), key=sort_key)
+        
         answers_text_lines = []
-        for key, value in answers.items():
-            answers_text_lines.append(f"{key}: {value}")
+        question_num = 0
+        for qid in sorted_qids:
+            answer = answers[qid]
+            qtext = question_texts.get(qid, f"Вопрос {qid}")
+            question_num += 1
+            answers_text_lines.append(f"Вопрос {question_num}: {qtext}")
+            answers_text_lines.append(f"Ответ {question_num}: {answer}")
+            if question_num < len(sorted_qids):
+                answers_text_lines.append("")  # Empty line between Q&A
+        
         answers_text = "\n".join(answers_text_lines)
         
         # Save to database
