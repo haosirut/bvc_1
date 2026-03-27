@@ -735,50 +735,81 @@ def create_main_menu_keyboard() -> Dict:
         ]
     }
 
-def create_menu_keyboard_with_form(is_admin: bool = False) -> Dict:
-    """Menu with Анкета button (for users who haven't completed form)."""
+
+def create_dynamic_menu_keyboard(
+    is_admin: bool = False,
+    form_first: int = 0,
+    test_book_1: int = 0,
+    practice_1: int = 0,
+    access_survey_1: int = 0,
+    diploma_1: int = 0,
+    fortune_wheel: int = 0
+) -> Dict:
+    """
+    Dynamic menu keyboard based on user state.
+    
+    Button-antagonists (only ONE can be shown at a time, value=1):
+    1. Приветственная анкета (form_first=1)
+    2. Тестирование (test_book_1=1)
+    3. Сдал(а) практику (practice_1=1)
+    4. Финальная анкета (access_survey_1=1)
+    5. Скачать диплом (diploma_1=1)
+    
+    Fortune wheel is separate (shown if fortune_wheel > 0)
+    """
     buttons = [
         [
             {
                 "action": {"type": "text", "label": "Меню"},
                 "color": "primary"
-            },
-            {
-                "action": {"type": "text", "label": "Анкета"},
-                "color": "positive"
             }
         ]
     ]
     
-    if is_admin:
+    # Determine which action button to show (only one at a time)
+    # Priority: check in order of progression
+    action_button = None
+    
+    if form_first == 1:
+        action_button = {
+            "action": {"type": "text", "label": "Приветственная анкета"},
+            "color": "positive"
+        }
+    elif test_book_1 == 1:
+        action_button = {
+            "action": {"type": "text", "label": "Тестирование"},
+            "color": "positive"
+        }
+    elif practice_1 == 1:
+        action_button = {
+            "action": {"type": "text", "label": "Сдал(а) практику"},
+            "color": "positive"
+        }
+    elif access_survey_1 == 1:
+        action_button = {
+            "action": {"type": "text", "label": "Финальная анкета"},
+            "color": "positive"
+        }
+    elif diploma_1 == 1:
+        action_button = {
+            "action": {"type": "text", "label": "Скачать диплом"},
+            "color": "positive"
+        }
+    
+    # Add action button if exists
+    if action_button:
+        buttons[0].append(action_button)
+    
+    # Add fortune wheel button if spins available (separate from antagonists)
+    if fortune_wheel > 0:
         buttons.append([
             {
-                "action": {"type": "text", "label": "АДМИН"},
-                "color": "negative"
+                "action": {"type": "text", "label": f"Колесо фортуны ({fortune_wheel})"},
+                "color": "positive"
             }
         ])
     
-    return {
-        "one_time": False,
-        "inline": False,
-        "buttons": buttons
-    }
-
-def create_menu_keyboard_with_test(is_admin: bool = False) -> Dict:
-    """Menu with Testing button (for users who completed form)."""
-    buttons = [
-        [
-            {
-                "action": {"type": "text", "label": "Меню"},
-                "color": "primary"
-            },
-            {
-                "action": {"type": "text", "label": "Тестирование"},
-                "color": "positive"
-            }
-        ]
-    ]
-    
+    # Add admin button
     if is_admin:
         buttons.append([
             {
@@ -951,99 +982,6 @@ def create_access_action_keyboard() -> Dict:
                 }
             ]
         ]
-    }
-
-def create_menu_keyboard_with_final_survey(is_admin: bool = False) -> Dict:
-    """Menu with Testing and Final Survey buttons (for users who have access to final survey)."""
-    buttons = [
-        [
-            {
-                "action": {"type": "text", "label": "Меню"},
-                "color": "primary"
-            },
-            {
-                "action": {"type": "text", "label": "Финальное анкетирование"},
-                "color": "positive"
-            }
-        ]
-    ]
-    
-    if is_admin:
-        buttons.append([
-            {
-                "action": {"type": "text", "label": "АДМИН"},
-                "color": "negative"
-            }
-        ])
-    
-    return {
-        "one_time": False,
-        "inline": False,
-        "buttons": buttons
-    }
-
-def create_menu_keyboard_after_test_passed(is_admin: bool = False) -> Dict:
-    """Menu for users who passed test but haven't done practice yet."""
-    buttons = [
-        [
-            {
-                "action": {"type": "text", "label": "Меню"},
-                "color": "primary"
-            },
-            {
-                "action": {"type": "text", "label": "Сдал(а) практику"},
-                "color": "positive"
-            }
-        ]
-    ]
-    
-    if is_admin:
-        buttons.append([
-            {
-                "action": {"type": "text", "label": "АДМИН"},
-                "color": "negative"
-            }
-        ])
-    
-    return {
-        "one_time": False,
-        "inline": False,
-        "buttons": buttons
-    }
-
-def create_menu_keyboard_with_practice_and_survey(is_admin: bool = False) -> Dict:
-    """Menu for users who passed test and have access to final survey (also show practice button)."""
-    buttons = [
-        [
-            {
-                "action": {"type": "text", "label": "Меню"},
-                "color": "primary"
-            },
-            {
-                "action": {"type": "text", "label": "Сдал(а) практику"},
-                "color": "positive"
-            }
-        ],
-        [
-            {
-                "action": {"type": "text", "label": "Финальное анкетирование"},
-                "color": "positive"
-            }
-        ]
-    ]
-    
-    if is_admin:
-        buttons.append([
-            {
-                "action": {"type": "text", "label": "АДМИН"},
-                "color": "negative"
-            }
-        ])
-    
-    return {
-        "one_time": False,
-        "inline": False,
-        "buttons": buttons
     }
 
 def create_answer_keyboard(shuffled_answers: List[Dict]) -> Dict:
@@ -1341,71 +1279,6 @@ def create_final_form_open_keyboard() -> Dict:
                 }
             ]
         ]
-    }
-
-
-def create_menu_keyboard_with_diploma(is_admin: bool = False) -> Dict:
-    """Menu keyboard with diploma download button."""
-    buttons = [
-        [
-            {
-                "action": {"type": "text", "label": "Меню"},
-                "color": "primary"
-            },
-            {
-                "action": {"type": "text", "label": "Скачать диплом"},
-                "color": "positive"
-            }
-        ]
-    ]
-    
-    if is_admin:
-        buttons.append([
-            {
-                "action": {"type": "text", "label": "АДМИН"},
-                "color": "negative"
-            }
-        ])
-    
-    return {
-        "one_time": False,
-        "inline": False,
-        "buttons": buttons
-    }
-
-
-def create_main_menu_keyboard_with_fortune_wheel(is_admin: bool = False, fortune_wheel_spins: int = 0) -> Dict:
-    """Main menu keyboard with optional fortune wheel button."""
-    buttons = [
-        [
-            {
-                "action": {"type": "text", "label": "Меню"},
-                "color": "primary"
-            }
-        ]
-    ]
-    
-    # Add fortune wheel button if spins available
-    if fortune_wheel_spins > 0:
-        buttons.append([
-            {
-                "action": {"type": "text", "label": f"Колесо фортуны ({fortune_wheel_spins})"},
-                "color": "positive"
-            }
-        ])
-    
-    if is_admin:
-        buttons.append([
-            {
-                "action": {"type": "text", "label": "АДМИН"},
-                "color": "negative"
-            }
-        ])
-    
-    return {
-        "one_time": False,
-        "inline": False,
-        "buttons": buttons
     }
 
 
@@ -1925,21 +1798,16 @@ class WebServer:
                 fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
                 
                 # Choose appropriate keyboard (same logic as Menu)
-                # INTEGER logic: 0=hidden, 1=show button, 2=completed
-                if fortune_wheel_spins > 0:
-                    keyboard = create_main_menu_keyboard_with_fortune_wheel(is_admin, fortune_wheel_spins)
-                elif diploma_1_status == 1:
-                    keyboard = create_menu_keyboard_with_diploma(is_admin)
-                elif access_survey_1_status == 1:
-                    keyboard = create_menu_keyboard_with_final_survey(is_admin)
-                elif practice_1_status == 1:
-                    keyboard = create_menu_keyboard_after_test_passed(is_admin)
-                elif test_book_1_status == 1:
-                    keyboard = create_menu_keyboard_with_test(is_admin)
-                elif form_first_status == 1:
-                    keyboard = create_menu_keyboard_with_form(is_admin)
-                else:
-                    keyboard = create_menu_keyboard_with_form(is_admin)
+                # Use dynamic menu keyboard - shows one action button + fortune wheel if available
+                keyboard = create_dynamic_menu_keyboard(
+                    is_admin=is_admin,
+                    form_first=form_first_status,
+                    test_book_1=test_book_1_status,
+                    practice_1=practice_1_status,
+                    access_survey_1=access_survey_1_status,
+                    diploma_1=diploma_1_status,
+                    fortune_wheel=fortune_wheel_spins
+                )
                 
                 await self.vk_api.send_message(
                     user_id=user_id,
@@ -2005,28 +1873,16 @@ class WebServer:
                 fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
                 
                 # Choose appropriate keyboard based on user state
-                # INTEGER logic: 0=hidden, 1=show button, 2=completed
-                if fortune_wheel_spins > 0:
-                    # State 6: Show fortune wheel button
-                    keyboard = create_main_menu_keyboard_with_fortune_wheel(is_admin, fortune_wheel_spins)
-                elif diploma_1_status == 1:
-                    # State 5: Show diploma download button
-                    keyboard = create_menu_keyboard_with_diploma(is_admin)
-                elif access_survey_1_status == 1:
-                    # State 4: Show final survey button
-                    keyboard = create_menu_keyboard_with_final_survey(is_admin)
-                elif practice_1_status == 1:
-                    # State 3: Show practice button
-                    keyboard = create_menu_keyboard_after_test_passed(is_admin)
-                elif test_book_1_status == 1:
-                    # State 2: Show test button
-                    keyboard = create_menu_keyboard_with_test(is_admin)
-                elif form_first_status == 1:
-                    # State 1: Show form button
-                    keyboard = create_menu_keyboard_with_form(is_admin)
-                else:
-                    # Fallback: show form button (new user)
-                    keyboard = create_menu_keyboard_with_form(is_admin)
+                # Use dynamic menu keyboard - shows one action button + fortune wheel if available
+                keyboard = create_dynamic_menu_keyboard(
+                    is_admin=is_admin,
+                    form_first=form_first_status,
+                    test_book_1=test_book_1_status,
+                    practice_1=practice_1_status,
+                    access_survey_1=access_survey_1_status,
+                    diploma_1=diploma_1_status,
+                    fortune_wheel=fortune_wheel_spins
+                )
                 
                 await self.vk_api.send_message(
                     user_id=user_id,
@@ -2400,18 +2256,34 @@ class WebServer:
                 )
                 return
             
-            # Handle "Анкета" button
-            if text.lower() == "анкета":
+            # Handle "Приветственная анкета" button
+            if text.lower() in ["анкета", "приветственная анкета"]:
                 # Check if user already completed form (form_first == 2)
                 user_data = await db.get_user(user_id)
                 form_first_status = user_data.get("form_first", 0) if user_data else 0
                 
                 if form_first_status == 2:
+                    # Get all statuses for dynamic keyboard
+                    test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
+                    practice_1_status = user_data.get("practice_1", 0) if user_data else 0
+                    access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
+                    diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+                    fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
+                    
+                    keyboard = create_dynamic_menu_keyboard(
+                        is_admin=is_admin,
+                        form_first=form_first_status,
+                        test_book_1=test_book_1_status,
+                        practice_1=practice_1_status,
+                        access_survey_1=access_survey_1_status,
+                        diploma_1=diploma_1_status,
+                        fortune_wheel=fortune_wheel_spins
+                    )
                     await self.vk_api.send_message(
                         user_id=user_id,
                         message=TEXTS_DATA.get("form_already_completed", "Вы уже заполнили анкету!"),
                         peer_id=peer_id,
-                        keyboard=create_menu_keyboard_with_test(is_admin)
+                        keyboard=keyboard
                     )
                     return
                 
@@ -2449,11 +2321,27 @@ class WebServer:
                 test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
                 
                 if test_book_1_status != 1:
+                    # Get all statuses for dynamic keyboard
+                    form_first_status = user_data.get("form_first", 0) if user_data else 0
+                    practice_1_status = user_data.get("practice_1", 0) if user_data else 0
+                    access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
+                    diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+                    fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
+                    
+                    keyboard = create_dynamic_menu_keyboard(
+                        is_admin=is_admin,
+                        form_first=form_first_status,
+                        test_book_1=test_book_1_status,
+                        practice_1=practice_1_status,
+                        access_survey_1=access_survey_1_status,
+                        diploma_1=diploma_1_status,
+                        fortune_wheel=fortune_wheel_spins
+                    )
                     await self.vk_api.send_message(
                         user_id=user_id,
                         message=TEXTS_DATA.get("test_not_available", "Сначала необходимо заполнить анкету!"),
                         peer_id=peer_id,
-                        keyboard=create_menu_keyboard_with_form(is_admin)
+                        keyboard=keyboard
                     )
                     return
                 
@@ -2927,12 +2815,28 @@ class WebServer:
             # Set practice_1 = 1 to show "Сдал(а) практику" button
             await db.update_user_field(user_id, "practice_1", 1)
             
+            # Get user data for keyboard
+            user_data = await db.get_user(user_id)
+            form_first_status = user_data.get("form_first", 0) if user_data else 0
+            test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
+            practice_1_status = user_data.get("practice_1", 0) if user_data else 0
+            access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
+            diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+            fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
+            
+            keyboard = create_dynamic_menu_keyboard(
+                is_admin=is_admin,
+                form_first=form_first_status,
+                test_book_1=test_book_1_status,
+                practice_1=practice_1_status,
+                access_survey_1=access_survey_1_status,
+                diploma_1=diploma_1_status,
+                fortune_wheel=fortune_wheel_spins
+            )
+            
             passed_text = TEXTS_DATA.get("test_passed", "🎉 Поздравляем! Вы сдали тест!")
             practice_info = "\n\nЕсли вы сдали практику - используйте кнопки Меню для уведомления менеджера. Он откроет вам доступ к финальному анкетированию и получению диплома о прохождении курса."
             message = f"{passed_text}\n\nВаш результат: {score}/{total}{practice_info}"
-            
-            # Use keyboard with practice button (practice_1 is now 1 = show button)
-            keyboard = create_menu_keyboard_after_test_passed(is_admin)
             
             await self.vk_api.send_message(
                 user_id=user_id,
@@ -3035,13 +2939,32 @@ class WebServer:
         # Check if user is admin
         is_admin = (user_id == USER_ADMIN_ID)
         
+        # Get user data for keyboard (form_first=2, test_book_1=1 at this point)
+        user_data = await db.get_user(user_id)
+        form_first_status = user_data.get("form_first", 0) if user_data else 0
+        test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
+        practice_1_status = user_data.get("practice_1", 0) if user_data else 0
+        access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
+        diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+        fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
+        
+        keyboard = create_dynamic_menu_keyboard(
+            is_admin=is_admin,
+            form_first=form_first_status,
+            test_book_1=test_book_1_status,
+            practice_1=practice_1_status,
+            access_survey_1=access_survey_1_status,
+            diploma_1=diploma_1_status,
+            fortune_wheel=fortune_wheel_spins
+        )
+        
         # Send completion message
         completed_text = TEXTS_DATA.get("form_completed", "✅ Анкета успешно заполнена!")
         await self.vk_api.send_message(
             user_id=user_id,
             message=completed_text,
             peer_id=peer_id,
-            keyboard=create_menu_keyboard_with_test(is_admin)
+            keyboard=keyboard
         )
         
         # Send instructions
@@ -3050,7 +2973,7 @@ class WebServer:
             user_id=user_id,
             message=instructions_text,
             peer_id=peer_id,
-            keyboard=create_menu_keyboard_with_test(is_admin)
+            keyboard=keyboard
         )
         
         # Notify marketers (CHECK_TEST_IDS) about form completion with full answers
