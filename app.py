@@ -149,8 +149,9 @@ class Database:
                     CREATE TABLE IF NOT EXISTS users (
                         user_id BIGINT PRIMARY KEY,
                         user_name TEXT,
-                        form BOOLEAN DEFAULT FALSE,
-                        form_answer TEXT DEFAULT '',
+                        user_name_case TEXT DEFAULT '',
+                        form_first BOOLEAN DEFAULT FALSE,
+                        form_first_answer TEXT DEFAULT '',
                         test_book_1 BOOLEAN DEFAULT FALSE,
                         test_book_2 BOOLEAN DEFAULT FALSE,
                         test_book_3 BOOLEAN DEFAULT FALSE,
@@ -167,10 +168,11 @@ class Database:
                         access_survey_2 BOOLEAN DEFAULT FALSE,
                         access_survey_3 BOOLEAN DEFAULT FALSE,
                         access_survey_4 BOOLEAN DEFAULT FALSE,
-                        fortune_wheel_1 BOOLEAN DEFAULT FALSE,
-                        fortune_wheel_2 BOOLEAN DEFAULT FALSE,
-                        fortune_wheel_3 BOOLEAN DEFAULT FALSE,
-                        fortune_wheel_4 BOOLEAN DEFAULT FALSE,
+                        form_end_1 TEXT DEFAULT '',
+                        form_end_2 TEXT DEFAULT '',
+                        form_end_3 TEXT DEFAULT '',
+                        form_end_4 TEXT DEFAULT '',
+                        fortune_wheel INTEGER DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
@@ -180,6 +182,9 @@ class Database:
             # Add new columns if they don't exist (for existing tables)
             async with self.pool.acquire() as conn:
                 new_columns = [
+                    ("user_name_case", "TEXT DEFAULT ''"),
+                    ("form_first", "BOOLEAN DEFAULT FALSE"),
+                    ("form_first_answer", "TEXT DEFAULT ''"),
                     ("practice_1", "BOOLEAN DEFAULT FALSE"),
                     ("practice_2", "BOOLEAN DEFAULT FALSE"),
                     ("practice_3", "BOOLEAN DEFAULT FALSE"),
@@ -192,21 +197,35 @@ class Database:
                     ("access_survey_2", "BOOLEAN DEFAULT FALSE"),
                     ("access_survey_3", "BOOLEAN DEFAULT FALSE"),
                     ("access_survey_4", "BOOLEAN DEFAULT FALSE"),
-                    ("fortune_wheel_1", "BOOLEAN DEFAULT FALSE"),
-                    ("fortune_wheel_2", "BOOLEAN DEFAULT FALSE"),
-                    ("fortune_wheel_3", "BOOLEAN DEFAULT FALSE"),
-                    ("fortune_wheel_4", "BOOLEAN DEFAULT FALSE"),
                     ("form_end_1", "TEXT DEFAULT ''"),
                     ("form_end_2", "TEXT DEFAULT ''"),
                     ("form_end_3", "TEXT DEFAULT ''"),
                     ("form_end_4", "TEXT DEFAULT ''"),
-                    ("user_name_case", "TEXT DEFAULT ''"),
+                    ("fortune_wheel", "INTEGER DEFAULT 0"),
                 ]
                 for col_name, col_type in new_columns:
                     try:
                         await conn.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col_name} {col_type}")
                     except Exception as e:
                         print(f"Column {col_name} might already exist: {e}", flush=True)
+                
+                # Migrate old columns to new ones if they exist
+                try:
+                    # Check if old 'form' column exists and migrate
+                    await conn.execute('''
+                        UPDATE users SET form_first = form WHERE form = TRUE AND form_first = FALSE
+                    ''')
+                except Exception as e:
+                    print(f"Migration form->form_first: {e}", flush=True)
+                
+                try:
+                    # Check if old 'form_answer' column exists and migrate
+                    await conn.execute('''
+                        UPDATE users SET form_first_answer = form_answer WHERE form_answer IS NOT NULL AND form_first_answer = ''
+                    ''')
+                except Exception as e:
+                    print(f"Migration form_answer->form_first_answer: {e}", flush=True)
+                
                 print("Database columns verified/added", flush=True)
             
             print("Database connection established", flush=True)
@@ -260,7 +279,7 @@ class Database:
         try:
             async with self.pool.acquire() as conn:
                 await conn.execute('''
-                    INSERT INTO users (user_id, user_name, form, form_answer, 
+                    INSERT INTO users (user_id, user_name, form_first, form_first_answer, 
                                        test_book_1, test_book_2, test_book_3, test_book_4)
                     VALUES ($1, $2, FALSE, '', FALSE, FALSE, FALSE, FALSE)
                     ON CONFLICT (user_id) DO UPDATE SET user_name = $2, updated_at = CURRENT_TIMESTAMP
@@ -277,12 +296,13 @@ class Database:
             return False
         
         allowed_fields = [
-            'form', 'form_answer', 'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 'user_name',
+            'form_first', 'form_first_answer', 'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 'user_name',
+            'user_name_case',
             'practice_1', 'practice_2', 'practice_3', 'practice_4',
             'course_1', 'course_2', 'course_3', 'course_4',
             'access_survey_1', 'access_survey_2', 'access_survey_3', 'access_survey_4',
-            'fortune_wheel_1', 'fortune_wheel_2', 'fortune_wheel_3', 'fortune_wheel_4',
-            'form_end_1', 'form_end_2', 'form_end_3', 'form_end_4', 'user_name_case'
+            'form_end_1', 'form_end_2', 'form_end_3', 'form_end_4',
+            'fortune_wheel'
         ]
         if field not in allowed_fields:
             return False
@@ -296,6 +316,22 @@ class Database:
                 return True
         except Exception as e:
             print(f"Error updating user {user_id} field {field}: {e}", flush=True)
+            return False
+    
+    async def increment_fortune_wheel(self, user_id: int, amount: int = 1) -> bool:
+        """Increment fortune_wheel counter by amount (can be negative)."""
+        if not self.pool:
+            return False
+        
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    "UPDATE users SET fortune_wheel = GREATEST(0, fortune_wheel + $1), updated_at = CURRENT_TIMESTAMP WHERE user_id = $2",
+                    amount, user_id
+                )
+                return True
+        except Exception as e:
+            print(f"Error incrementing fortune_wheel for user {user_id}: {e}", flush=True)
             return False
     
     async def search_users_by_name(self, search_text: str) -> List[Dict]:
@@ -1101,6 +1137,41 @@ def create_final_form_open_keyboard() -> Dict:
     }
 
 
+def create_main_menu_keyboard_with_fortune_wheel(is_admin: bool = False, fortune_wheel_spins: int = 0) -> Dict:
+    """Main menu keyboard with optional fortune wheel button."""
+    buttons = [
+        [
+            {
+                "action": {"type": "text", "label": "Меню"},
+                "color": "primary"
+            }
+        ]
+    ]
+    
+    # Add fortune wheel button if spins available
+    if fortune_wheel_spins > 0:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": f"Колесо фортуны ({fortune_wheel_spins})"},
+                "color": "positive"
+            }
+        ])
+    
+    if is_admin:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "АДМИН"},
+                "color": "negative"
+            }
+        ])
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
+    }
+
+
 # -----------------------------------------------------------------------------
 # Test Logic
 # -----------------------------------------------------------------------------
@@ -1216,21 +1287,44 @@ def is_physical_prize(prize_name: str) -> bool:
 # Database Export Helper
 # -----------------------------------------------------------------------------
 def create_users_xlsx(users: List[Dict]) -> bytes:
-    """Create XLSX file with users data."""
+    """Create XLSX file with users data grouped by courses."""
     wb = Workbook()
     ws = wb.active
     ws.title = "Пользователи"
     
-    # Define headers
+    # Define headers - grouped by courses
     headers = [
         "ID пользователя",
         "Имя",
-        "Анкета заполнена",
-        "Ответ анкеты",
+        "Имя в падеже",
+        "Начальная анкета",
+        "Ответ нач. анкеты",
+        "Колесо фортуны",
+        # Курс 1
         "Тест 1",
+        "Практика 1",
+        "Доступ к анкете 1",
+        "Ответ анкеты 1",
+        "Курс 1",
+        # Курс 2
         "Тест 2",
+        "Практика 2",
+        "Доступ к анкете 2",
+        "Ответ анкеты 2",
+        "Курс 2",
+        # Курс 3
         "Тест 3",
+        "Практика 3",
+        "Доступ к анкете 3",
+        "Ответ анкеты 3",
+        "Курс 3",
+        # Курс 4
         "Тест 4",
+        "Практика 4",
+        "Доступ к анкете 4",
+        "Ответ анкеты 4",
+        "Курс 4",
+        # Даты
         "Дата создания",
         "Дата обновления"
     ]
@@ -1270,12 +1364,35 @@ def create_users_xlsx(users: List[Dict]) -> bytes:
         row_data = [
             user.get("user_id", ""),
             user.get("user_name", ""),
-            bool_ru(user.get("form", False)),
-            user.get("form_answer", ""),
+            user.get("user_name_case", ""),
+            bool_ru(user.get("form_first", False)),
+            user.get("form_first_answer", ""),
+            user.get("fortune_wheel", 0),
+            # Курс 1
             bool_ru(user.get("test_book_1", False)),
+            bool_ru(user.get("practice_1", False)),
+            bool_ru(user.get("access_survey_1", False)),
+            user.get("form_end_1", ""),
+            bool_ru(user.get("course_1", False)),
+            # Курс 2
             bool_ru(user.get("test_book_2", False)),
+            bool_ru(user.get("practice_2", False)),
+            bool_ru(user.get("access_survey_2", False)),
+            user.get("form_end_2", ""),
+            bool_ru(user.get("course_2", False)),
+            # Курс 3
             bool_ru(user.get("test_book_3", False)),
+            bool_ru(user.get("practice_3", False)),
+            bool_ru(user.get("access_survey_3", False)),
+            user.get("form_end_3", ""),
+            bool_ru(user.get("course_3", False)),
+            # Курс 4
             bool_ru(user.get("test_book_4", False)),
+            bool_ru(user.get("practice_4", False)),
+            bool_ru(user.get("access_survey_4", False)),
+            user.get("form_end_4", ""),
+            bool_ru(user.get("course_4", False)),
+            # Даты
             format_datetime(user.get("created_at", "")),
             format_datetime(user.get("updated_at", ""))
         ]
@@ -1286,9 +1403,16 @@ def create_users_xlsx(users: List[Dict]) -> bytes:
             cell.alignment = Alignment(vertical="center", wrap_text=True)
     
     # Adjust column widths
-    column_widths = [15, 25, 18, 40, 10, 10, 10, 10, 20, 20]
+    column_widths = [15, 25, 25, 15, 40, 12, 10, 10, 15, 40, 10, 10, 10, 15, 40, 10, 10, 10, 15, 40, 10, 10, 10, 15, 40, 10, 20, 20]
     for col, width in enumerate(column_widths, 1):
-        ws.column_dimensions[chr(64 + col) if col <= 26 else f"A{chr(64 + col - 26)}"].width = width
+        col_letter = chr(64 + col) if col <= 26 else f"A{chr(64 + col - 26)}" if col <= 52 else f"B{chr(64 + col - 52)}"
+        if col <= 26:
+            col_letter = chr(64 + col)
+        elif col <= 52:
+            col_letter = f"A{chr(64 + col - 26)}"
+        else:
+            col_letter = f"B{chr(64 + col - 52)}"
+        ws.column_dimensions[col_letter].width = width
     
     # Freeze first row
     ws.freeze_panes = "A2"
@@ -1417,7 +1541,7 @@ class WebServer:
                     user_data = await db.get_user(user_id)
                 
                 # Check FORM status, test status, and access to final survey
-                form_completed = user_data.get("form", False) if user_data else False
+                form_completed = user_data.get("form_first", False) if user_data else False
                 test_passed = user_data.get("test_book_1", False) if user_data else False
                 has_final_survey_access = any([
                     user_data.get("access_survey_1", False),
@@ -1491,7 +1615,7 @@ class WebServer:
                     user_data = await db.get_user(user_id)
                 
                 # Get FORM status, test status, and access to final survey
-                form_completed = user_data.get("form", False) if user_data else False
+                form_completed = user_data.get("form_first", False) if user_data else False
                 test_passed = user_data.get("test_book_1", False) if user_data else False
                 has_final_survey_access = any([
                     user_data.get("access_survey_1", False),
@@ -1499,9 +1623,13 @@ class WebServer:
                     user_data.get("access_survey_3", False),
                     user_data.get("access_survey_4", False)
                 ]) if user_data else False
+                fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
                 
-                # Choose appropriate keyboard
-                if has_final_survey_access and test_passed:
+                # Choose appropriate keyboard based on user state
+                if fortune_wheel_spins > 0:
+                    # Show fortune wheel button if spins available
+                    keyboard = create_main_menu_keyboard_with_fortune_wheel(is_admin, fortune_wheel_spins)
+                elif has_final_survey_access and test_passed:
                     keyboard = create_menu_keyboard_with_practice_and_survey(is_admin)
                 elif test_passed:
                     keyboard = create_menu_keyboard_after_test_passed(is_admin)
@@ -1760,6 +1888,23 @@ class WebServer:
                 await self._start_final_form(user_id, peer_id, course)
                 return
             
+            # Handle "Колесо фортуны" button from main menu
+            if text.startswith("Колесо фортуны"):
+                user_data = await db.get_user(user_id)
+                fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
+                
+                if fortune_wheel_spins <= 0:
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message=TEXTS_DATA.get("fortune_wheel_no_spins", "У вас нет доступных вращений колеса фортуны."),
+                        peer_id=peer_id,
+                        keyboard=create_main_menu_keyboard()
+                    )
+                    return
+                
+                await self._handle_fortune_wheel_spin(user_id, peer_id)
+                return
+            
             # Handle fortune wheel buttons
             if text == "Крутить":
                 await self._handle_fortune_wheel_spin(user_id, peer_id)
@@ -1857,7 +2002,7 @@ class WebServer:
             if text.lower() == "анкета":
                 # Check if user already completed form
                 user_data = await db.get_user(user_id)
-                form_completed = user_data.get("form", False) if user_data else False
+                form_completed = user_data.get("form_first", False) if user_data else False
                 
                 if form_completed:
                     await self.vk_api.send_message(
@@ -1899,7 +2044,7 @@ class WebServer:
             if text.lower() == "тестирование":
                 # Check if user completed form
                 user_data = await db.get_user(user_id)
-                form_completed = user_data.get("form", False) if user_data else False
+                form_completed = user_data.get("form_first", False) if user_data else False
                 
                 if not form_completed:
                     await self.vk_api.send_message(
@@ -2219,7 +2364,7 @@ class WebServer:
         
         # Get user form status for correct keyboard
         user_data = await db.get_user(user_id)
-        form_completed = user_data.get("form", False) if user_data else False
+        form_completed = user_data.get("form_first", False) if user_data else False
         has_final_survey_access = any([
             user_data.get("access_survey_1", False),
             user_data.get("access_survey_2", False),
@@ -2334,8 +2479,8 @@ class WebServer:
         
         # Update user in database: name, answers, form completed
         await db.update_user_field(user_id, "user_name", user_name)
-        await db.update_user_field(user_id, "form_answer", form_answer)
-        await db.update_user_field(user_id, "form", True)
+        await db.update_user_field(user_id, "form_first_answer", form_answer)
+        await db.update_user_field(user_id, "form_first", True)
         
         print(f"Form completed for user {user_id}, name: {user_name}", flush=True)
         
@@ -2482,9 +2627,8 @@ class WebServer:
         if "{user_name_case}" in question_text:
             question_text = question_text.replace("{user_name_case}", session.get("user_name_case", ""))
         
-        # Add question prefix
-        prefix = TEXTS_DATA.get("final_form_question_prefix", "Вопрос {current}:")
-        message = prefix.format(current=question_id) + "\n\n" + question_text
+        # Send question text without prefix
+        message = question_text
         
         # Choose keyboard based on question type
         if question_type == "open":
@@ -2665,59 +2809,41 @@ class WebServer:
         # Clear session
         del FINAL_FORM_SESSIONS[user_id]
         
-        # Offer fortune wheel
-        await self._offer_fortune_wheel(user_id, peer_id, course)
-
-    async def _offer_fortune_wheel(self, user_id: int, peer_id: int, course: int) -> None:
-        """Offer fortune wheel to user."""
-        # Check if fortune wheel already used
-        user_data = await db.get_user(user_id)
-        fortune_field = f"fortune_wheel_{course}"
+        # Add fortune wheel spin
+        await db.increment_fortune_wheel(user_id, 1)
         
-        if user_data and user_data.get(fortune_field):
-            await self.vk_api.send_message(
-                user_id=user_id,
-                message=TEXTS_DATA.get("fortune_wheel_already_used", "Вы уже использовали своё вращение колеса фортуны для этого курса."),
-                peer_id=peer_id,
-                keyboard=create_main_menu_keyboard()
-            )
+        # Offer fortune wheel
+        await self._offer_fortune_wheel(user_id, peer_id)
+
+    async def _offer_fortune_wheel(self, user_id: int, peer_id: int) -> None:
+        """Offer fortune wheel to user after final form completion."""
+        user_data = await db.get_user(user_id)
+        fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
+        
+        if fortune_wheel_spins <= 0:
             return
         
         # Offer wheel
-        intro_text = TEXTS_DATA.get("fortune_wheel_intro", "Вам доступно 1 вращение \"Колеса фортуны\"")
+        intro_text = TEXTS_DATA.get("fortune_wheel_intro", "Вам доступно вращение \"Колеса фортуны\"")
         await self.vk_api.send_message(
             user_id=user_id,
             message=intro_text,
             peer_id=peer_id,
             keyboard=create_fortune_wheel_keyboard()
         )
-        
-        # Initialize wheel session
-        FORTUNE_WHEEL_SESSIONS[user_id] = {
-            "course": course,
-            "spin_available": True
-        }
 
     async def _handle_fortune_wheel_spin(self, user_id: int, peer_id: int) -> None:
-        """Handle fortune wheel spin."""
-        session = FORTUNE_WHEEL_SESSIONS.get(user_id)
-        if not session:
-            return
-        
-        course = session["course"]
-        
-        # Check if already used
+        """Handle fortune wheel spin request - show prizes."""
         user_data = await db.get_user(user_id)
-        fortune_field = f"fortune_wheel_{course}"
+        fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
         
-        if user_data and user_data.get(fortune_field):
+        if fortune_wheel_spins <= 0:
             await self.vk_api.send_message(
                 user_id=user_id,
-                message=TEXTS_DATA.get("fortune_wheel_already_used", "Вы уже использовали своё вращение колеса фортуны."),
+                message=TEXTS_DATA.get("fortune_wheel_no_spins", "У вас нет доступных вращений колеса фортуны."),
                 peer_id=peer_id,
                 keyboard=create_main_menu_keyboard()
             )
-            del FORTUNE_WHEEL_SESSIONS[user_id]
             return
         
         # Show prizes and spin button
@@ -2732,32 +2858,24 @@ class WebServer:
 
     async def _spin_fortune_wheel(self, user_id: int, peer_id: int) -> None:
         """Spin the fortune wheel and award prize."""
-        session = FORTUNE_WHEEL_SESSIONS.get(user_id)
-        if not session:
-            return
-        
-        course = session["course"]
-        
-        # Check if already used
         user_data = await db.get_user(user_id)
-        fortune_field = f"fortune_wheel_{course}"
+        fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
         
-        if user_data and user_data.get(fortune_field):
+        if fortune_wheel_spins <= 0:
             await self.vk_api.send_message(
                 user_id=user_id,
-                message=TEXTS_DATA.get("fortune_wheel_already_used", "Вы уже использовали своё вращение колеса фортуны."),
+                message=TEXTS_DATA.get("fortune_wheel_no_spins", "У вас нет доступных вращений колеса фортуны."),
                 peer_id=peer_id,
                 keyboard=create_main_menu_keyboard()
             )
-            del FORTUNE_WHEEL_SESSIONS[user_id]
             return
         
         # Select prize
         prizes = FINAL_FORM_DATA.get("fortune_wheel", {}).get("prizes", [])
         prize = select_prize_by_probability(prizes)
         
-        # Mark as used
-        await db.update_user_field(user_id, fortune_field, True)
+        # Decrease fortune wheel spins
+        await db.increment_fortune_wheel(user_id, -1)
         
         # Notify about prize
         result_text = TEXTS_DATA.get("fortune_wheel_result", "🎉 Поздравляем! Вам выпало:\n\n🎁 {prize}")
@@ -2780,9 +2898,6 @@ class WebServer:
             peer_id=peer_id,
             keyboard=create_main_menu_keyboard()
         )
-        
-        # Clear session
-        del FORTUNE_WHEEL_SESSIONS[user_id]
 
 
 # -----------------------------------------------------------------------------

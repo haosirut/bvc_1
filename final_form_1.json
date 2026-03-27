@@ -205,7 +205,7 @@
       "type": "open",
       "question": "Введите, пожалуйста, корректные Фамилию и Имя.",
       "update_field": "user_name",
-      "next_question": "check_need_case"
+      "next_question": "check_need_case_update"
     },
     {
       "id": 15,
