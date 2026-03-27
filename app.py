@@ -247,13 +247,17 @@ class Database:
                             col_name
                         )
                         if col_type == 'boolean':
-                            # Alter column type: TRUE -> 2, FALSE -> 0, NULL -> default
+                            # Step 1: Drop default
+                            await conn.execute(f"ALTER TABLE users ALTER COLUMN {col_name} DROP DEFAULT")
+                            # Step 2: Alter column type: TRUE -> 2, FALSE -> 0, NULL -> default
                             await conn.execute(f'''
                                 ALTER TABLE users ALTER COLUMN {col_name} TYPE INTEGER 
                                 USING CASE WHEN {col_name} = TRUE THEN 2 
                                            WHEN {col_name} = FALSE THEN 0 
                                            ELSE {default_val} END
                             ''')
+                            # Step 3: Set new default
+                            await conn.execute(f"ALTER TABLE users ALTER COLUMN {col_name} SET DEFAULT {default_val}")
                             print(f"Migration: {col_name} type changed from boolean to integer", flush=True)
                     except Exception as e:
                         print(f"Migration alter {col_name}: {e}", flush=True)
@@ -263,13 +267,13 @@ class Database:
                     # If form_first = 2 (completed), set test_book_X = 1 (accessible)
                     # But only if test_book_X is not already 2 (completed)
                     for i in range(1, 5):
-                        await conn.execute(f'''UPDATE users SET test_book_{i} = 1 WHERE form_first = 2 AND test_book_{i} = 0''')
+                        await conn.execute(f'''UPDATE users SET test_book_{i} = 1 WHERE form_first = 2 AND (test_book_{i} = 0 OR test_book_{i} IS NULL)''')
                     print("Migration: test_book_X transition applied", flush=True)
                     
                     # If test_book_X = 2 (passed), set practice_X = 1 (accessible)
                     # But only if practice_X is not already 2 (completed)
                     for i in range(1, 5):
-                        await conn.execute(f'''UPDATE users SET practice_{i} = 1 WHERE test_book_{i} = 2 AND practice_{i} = 0''')
+                        await conn.execute(f'''UPDATE users SET practice_{i} = 1 WHERE test_book_{i} = 2 AND (practice_{i} = 0 OR practice_{i} IS NULL)''')
                     print("Migration: practice_X transition applied", flush=True)
                     
                     print("Migration: State transitions completed", flush=True)
