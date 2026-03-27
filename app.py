@@ -24,7 +24,8 @@ sys.stderr.reconfigure(line_buffering=True)
 # -----------------------------------------------------------------------------
 TOKEN = os.getenv("TOKEN", "")
 CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")
-CHECK_TEST_STR = os.getenv("CHECK_TEST", "")  # USER_MEN - Manager IDs for notifications (test passed, form completed, practice done)
+USER_MEN_STR = os.getenv("USER_MEN", "")  # Manager IDs - can open access, add fortune wheel spins
+USER_MAR_STR = os.getenv("USER_MAR", "")  # Marketing IDs - can view form answers
 USER_ADMIN = os.getenv("USER_ADMIN", "")  # Super admin ID for admin panel and database export
 PORT = int(os.getenv("PORT", "8080"))
 
@@ -35,7 +36,10 @@ DB_USER = os.getenv("DB_USER", "")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 # Parse manager IDs (USER_MEN) from comma-separated string
-CHECK_TEST_IDS = [int(id.strip()) for id in CHECK_TEST_STR.split(",") if id.strip()]
+USER_MEN_IDS = [int(id.strip()) for id in USER_MEN_STR.split(",") if id.strip()]
+
+# Parse marketing IDs (USER_MAR) from comma-separated string
+USER_MAR_IDS = [int(id.strip()) for id in USER_MAR_STR.split(",") if id.strip()]
 
 # Parse super admin ID
 USER_ADMIN_ID = int(USER_ADMIN) if USER_ADMIN else 0
@@ -53,7 +57,8 @@ print("=" * 50, flush=True)
 print("VK BOT STARTING", flush=True)
 print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
 print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
-print(f"CHECK_TEST_IDS (USER_MEN): {CHECK_TEST_IDS}", flush=True)
+print(f"USER_MEN_IDS (Managers): {USER_MEN_IDS}", flush=True)
+print(f"USER_MAR_IDS (Marketing): {USER_MAR_IDS}", flush=True)
 print(f"USER_ADMIN_ID: {USER_ADMIN_ID}", flush=True)
 print(f"DB_HOST: {'SET' if DB_HOST else 'NOT SET'}", flush=True)
 print(f"DB_NAME: {'SET' if DB_NAME else 'NOT SET'}", flush=True)
@@ -98,8 +103,9 @@ FORM_SESSIONS: Dict[int, Dict] = {}
 
 # -----------------------------------------------------------------------------
 # Admin Search Sessions (in-memory)
-# Format: {admin_id: {"step": str, "search_text": str, "results": [Dict], "page": int, "selected_user_id": int}}
-# Steps: "search", "select_user", "select_course", "confirm_action"
+# Format: {admin_id: {"step": str, "search_text": str, "results": [Dict], "page": int, "selected_user_id": int, "mode": str}}
+# Steps: "search", "select_user", "select_course", "select_spins", "select_form"
+# Modes: "access_survey", "fortune_wheel", "view_answers"
 # -----------------------------------------------------------------------------
 ADMIN_SEARCH_SESSIONS: Dict[int, Dict] = {}
 
@@ -738,6 +744,8 @@ def create_main_menu_keyboard() -> Dict:
 
 def create_dynamic_menu_keyboard(
     is_admin: bool = False,
+    is_manager: bool = False,
+    is_marketing: bool = False,
     form_first: int = 0,
     test_book_1: int = 0,
     practice_1: int = 0,
@@ -756,6 +764,7 @@ def create_dynamic_menu_keyboard(
     5. Скачать диплом (diploma_1=1)
     
     Fortune wheel is separate (shown if fortune_wheel > 0)
+    Special panels: Admin, Manager, Marketing
     """
     buttons = [
         [
@@ -809,7 +818,24 @@ def create_dynamic_menu_keyboard(
             }
         ])
     
-    # Add admin button
+    # Add special panel buttons (Manager and Marketing)
+    if is_manager:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "Менеджер"},
+                "color": "primary"
+            }
+        ])
+    
+    if is_marketing:
+        buttons.append([
+            {
+                "action": {"type": "text", "label": "Маркетинг"},
+                "color": "primary"
+            }
+        ])
+    
+    # Add admin button (for super admin only)
     if is_admin:
         buttons.append([
             {
@@ -850,11 +876,112 @@ def create_admin_keyboard() -> Dict:
             ],
             [
                 {
+                    "action": {"type": "text", "label": "Добавить вращений колеса фортуны"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Посмотреть ответы на анкеты"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
                     "action": {"type": "text", "label": "Меню"},
                     "color": "secondary"
                 }
             ]
         ]
+    }
+
+def create_manager_keyboard() -> Dict:
+    """Manager panel keyboard for USER_MEN."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Открыть доступ к финальной анкете"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Добавить вращений колеса фортуны"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+def create_marketing_keyboard() -> Dict:
+    """Marketing panel keyboard for USER_MAR."""
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": [
+            [
+                {
+                    "action": {"type": "text", "label": "Посмотреть ответы на анкеты"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Меню"},
+                    "color": "secondary"
+                }
+            ]
+        ]
+    }
+
+def create_spins_selection_keyboard() -> Dict:
+    """Keyboard for selecting number of fortune wheel spins (1-10)."""
+    buttons = []
+    # Row 1: 1-5
+    buttons.append([
+        {"action": {"type": "text", "label": str(i)}, "color": "primary"} for i in range(1, 6)
+    ])
+    # Row 2: 6-10
+    buttons.append([
+        {"action": {"type": "text", "label": str(i)}, "color": "primary"} for i in range(6, 11)
+    ])
+    # Row 3: Menu
+    buttons.append([
+        {"action": {"type": "text", "label": "Меню"}, "color": "secondary"}
+    ])
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
+    }
+
+def create_form_selection_keyboard(user_data: Dict) -> Dict:
+    """Keyboard for selecting which form answers to view."""
+    buttons = []
+    
+    # Check which forms have answers
+    if user_data.get("form_first_answer"):
+        buttons.append([{"action": {"type": "text", "label": "Приветственная анкета"}, "color": "primary"}])
+    
+    for i in range(1, 5):
+        if user_data.get(f"form_end_{i}"):
+            buttons.append([{"action": {"type": "text", "label": f"Финальная анкета Курс {i}"}, "color": "primary"}])
+    
+    buttons.append([{"action": {"type": "text", "label": "Меню"}, "color": "secondary"}])
+    
+    return {
+        "one_time": False,
+        "inline": False,
+        "buttons": buttons
     }
 
 def create_user_search_keyboard(users: List[Dict], page: int = 0, per_page: int = 6) -> Dict:
@@ -1632,7 +1759,8 @@ class WebServer:
             "status": "ok",
             "token_configured": bool(TOKEN),
             "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
-            "check_test_ids_user_men": CHECK_TEST_IDS,
+            "user_men_ids": USER_MEN_IDS,
+            "user_mar_ids": USER_MAR_IDS,
             "user_admin_id": USER_ADMIN_ID,
             "tests_loaded": bool(TESTS_DATA),
             "texts_loaded": bool(TEXTS_DATA),
@@ -1693,8 +1821,10 @@ class WebServer:
             if attachments:
                 print(f"Attachments: {len(attachments)}", flush=True)
             
-            # Check if user is admin
+            # Check user roles
             is_admin = (user_id == USER_ADMIN_ID)
+            is_manager = (user_id in USER_MEN_IDS)
+            is_marketing = (user_id in USER_MAR_IDS)
             
             # Handle file upload for admin (Excel import)
             if is_admin and attachments:
@@ -1789,6 +1919,8 @@ class WebServer:
                 # Use dynamic menu keyboard - shows one action button + fortune wheel if available
                 keyboard = create_dynamic_menu_keyboard(
                     is_admin=is_admin,
+                    is_manager=is_manager,
+                    is_marketing=is_marketing,
                     form_first=form_first_status,
                     test_book_1=test_book_1_status,
                     practice_1=practice_1_status,
@@ -1864,6 +1996,8 @@ class WebServer:
                 # Use dynamic menu keyboard - shows one action button + fortune wheel if available
                 keyboard = create_dynamic_menu_keyboard(
                     is_admin=is_admin,
+                    is_manager=is_manager,
+                    is_marketing=is_marketing,
                     form_first=form_first_status,
                     test_book_1=test_book_1_status,
                     practice_1=practice_1_status,
@@ -1887,6 +2021,26 @@ class WebServer:
                     message=TEXTS_DATA.get("admin_panel_title", "🔧 Админ-панель:\n\nВыберите действие:"),
                     peer_id=peer_id,
                     keyboard=create_admin_keyboard()
+                )
+                return
+            
+            # Handle "Менеджер" button - for USER_MEN (show manager menu)
+            if text.lower() == "менеджер" and is_manager:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="📋 Панель менеджера:\n\nВыберите действие:",
+                    peer_id=peer_id,
+                    keyboard=create_manager_keyboard()
+                )
+                return
+            
+            # Handle "Маркетинг" button - for USER_MAR (show marketing menu)
+            if text.lower() == "маркетинг" and is_marketing:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="📊 Панель маркетинга:\n\nВыберите действие:",
+                    peer_id=peer_id,
+                    keyboard=create_marketing_keyboard()
                 )
                 return
             
@@ -1914,8 +2068,8 @@ class WebServer:
                 }
                 return
             
-            # Handle "Открыть доступ к финальной анкете" button
-            if text.lower() == "открыть доступ к финальной анкете" and is_admin:
+            # Handle "Открыть доступ к финальной анкете" button - for admin and managers
+            if text.lower() == "открыть доступ к финальной анкете" and (is_admin or is_manager):
                 # Clear any existing admin search session
                 if user_id in ADMIN_SEARCH_SESSIONS:
                     del ADMIN_SEARCH_SESSIONS[user_id]
@@ -1929,6 +2083,55 @@ class WebServer:
                 # Start admin search session
                 ADMIN_SEARCH_SESSIONS[user_id] = {
                     "step": "search",
+                    "mode": "access_survey",
+                    "search_text": "",
+                    "results": [],
+                    "page": 0,
+                    "selected_user_id": None,
+                    "selected_course": None
+                }
+                return
+            
+            # Handle "Добавить вращений колеса фортуны" button - for admin and managers
+            if text.lower() == "добавить вращений колеса фортуны" and (is_admin or is_manager):
+                # Clear any existing admin search session
+                if user_id in ADMIN_SEARCH_SESSIONS:
+                    del ADMIN_SEARCH_SESSIONS[user_id]
+                
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="🎡 Добавление вращений колеса фортуны:\n\n🔍 Введите имя или часть имени для поиска пользователя:",
+                    peer_id=peer_id,
+                    keyboard=create_main_menu_keyboard()
+                )
+                # Start admin search session for fortune wheel
+                ADMIN_SEARCH_SESSIONS[user_id] = {
+                    "step": "search",
+                    "mode": "fortune_wheel",
+                    "search_text": "",
+                    "results": [],
+                    "page": 0,
+                    "selected_user_id": None,
+                    "selected_course": None
+                }
+                return
+            
+            # Handle "Посмотреть ответы на анкеты" button - for admin and marketing
+            if text.lower() == "посмотреть ответы на анкеты" and (is_admin or is_marketing):
+                # Clear any existing admin search session
+                if user_id in ADMIN_SEARCH_SESSIONS:
+                    del ADMIN_SEARCH_SESSIONS[user_id]
+                
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="📋 Просмотр ответов на анкеты:\n\n🔍 Введите имя или часть имени для поиска пользователя:",
+                    peer_id=peer_id,
+                    keyboard=create_main_menu_keyboard()
+                )
+                # Start admin search session for viewing answers
+                ADMIN_SEARCH_SESSIONS[user_id] = {
+                    "step": "search",
+                    "mode": "view_answers",
                     "search_text": "",
                     "results": [],
                     "page": 0,
@@ -1938,7 +2141,7 @@ class WebServer:
                 return
             
             # Handle admin search session
-            if is_admin and user_id in ADMIN_SEARCH_SESSIONS:
+            if (is_admin or is_manager or is_marketing) and user_id in ADMIN_SEARCH_SESSIONS:
                 session = ADMIN_SEARCH_SESSIONS[user_id]
                 
                 # Handle pagination - "Далее"
@@ -1980,17 +2183,138 @@ class WebServer:
                     for user in session["results"]:
                         if user.get("user_name", "").startswith(selected_name):
                             session["selected_user_id"] = user.get("user_id")
-                            session["step"] = "select_course"
                             break
                     
                     if session["selected_user_id"]:
-                        msg_template = TEXTS_DATA.get("admin_select_course", "Выберите курс для пользователя:\n{user_name}")
+                        mode = session.get("mode", "access_survey")
+                        
+                        if mode == "access_survey":
+                            # Show course selection for access survey
+                            session["step"] = "select_course"
+                            msg_template = TEXTS_DATA.get("admin_select_course", "Выберите курс для пользователя:\n{user_name}")
+                            await self.vk_api.send_message(
+                                user_id=user_id,
+                                message=msg_template.format(user_name=selected_name),
+                                peer_id=peer_id,
+                                keyboard=create_course_selection_keyboard()
+                            )
+                        
+                        elif mode == "fortune_wheel":
+                            # Show spins selection for fortune wheel
+                            session["step"] = "select_spins"
+                            await self.vk_api.send_message(
+                                user_id=user_id,
+                                message=f"🎡 Выберите количество вращений для пользователя:\n{selected_name}",
+                                peer_id=peer_id,
+                                keyboard=create_spins_selection_keyboard()
+                            )
+                        
+                        elif mode == "view_answers":
+                            # Show form selection for viewing answers
+                            session["step"] = "select_form"
+                            selected_user = await db.get_user(session["selected_user_id"])
+                            
+                            if selected_user:
+                                # Check which forms have answers
+                                has_forms = False
+                                if selected_user.get("form_first_answer"):
+                                    has_forms = True
+                                for i in range(1, 5):
+                                    if selected_user.get(f"form_end_{i}"):
+                                        has_forms = True
+                                
+                                if has_forms:
+                                    await self.vk_api.send_message(
+                                        user_id=user_id,
+                                        message=f"📋 Выберите анкету для просмотра:\n{selected_name}",
+                                        peer_id=peer_id,
+                                        keyboard=create_form_selection_keyboard(selected_user)
+                                    )
+                                else:
+                                    await self.vk_api.send_message(
+                                        user_id=user_id,
+                                        message=f"❌ У пользователя {selected_name} нет заполненных анкет.",
+                                        peer_id=peer_id,
+                                        keyboard=create_main_menu_keyboard()
+                                    )
+                                    del ADMIN_SEARCH_SESSIONS[user_id]
+                    return
+                
+                # Handle spins selection (1-10) for fortune wheel
+                if session.get("mode") == "fortune_wheel" and session["step"] == "select_spins" and text.isdigit():
+                    spins = int(text)
+                    if 1 <= spins <= 10:
+                        target_user_id = session["selected_user_id"]
+                        
+                        # Get current spins and add new ones
+                        target_user = await db.get_user(target_user_id)
+                        current_spins = target_user.get("fortune_wheel", 0) if target_user else 0
+                        new_spins = current_spins + spins
+                        
+                        # Update database
+                        await db.update_user_field(target_user_id, "fortune_wheel", new_spins)
+                        
+                        user_name = target_user.get("user_name", "Unknown") if target_user else "Unknown"
+                        
+                        # Determine which keyboard to show
+                        keyboard = create_manager_keyboard() if is_manager else create_admin_keyboard()
+                        
                         await self.vk_api.send_message(
                             user_id=user_id,
-                            message=msg_template.format(user_name=selected_name),
+                            message=f"✅ Добавлено {spins} вращений колеса фортуны для:\n{user_name}\n\nТеперь всего: {new_spins}",
                             peer_id=peer_id,
-                            keyboard=create_course_selection_keyboard()
+                            keyboard=keyboard
                         )
+                        
+                        del ADMIN_SEARCH_SESSIONS[user_id]
+                        return
+                
+                # Handle form selection for viewing answers
+                if session.get("mode") == "view_answers" and session["step"] == "select_form":
+                    target_user_id = session["selected_user_id"]
+                    target_user = await db.get_user(target_user_id)
+                    user_name = target_user.get("user_name", "Unknown") if target_user else "Unknown"
+                    
+                    answers_text = ""
+                    
+                    if text == "Приветственная анкета":
+                        answers_text = target_user.get("form_first_answer", "") if target_user else ""
+                        if answers_text:
+                            answers_text = f"📋 ПРИВЕТСТВЕННАЯ АНКЕТА\n👤 Пользователь: {user_name}\n\n{answers_text}"
+                    
+                    elif text.startswith("Финальная анкета Курс"):
+                        course_num = text.split()[-1]
+                        answers_text = target_user.get(f"form_end_{course_num}", "") if target_user else ""
+                        if answers_text:
+                            answers_text = f"📋 ФИНАЛЬНАЯ АНКЕТА КУРС {course_num}\n👤 Пользователь: {user_name}\n\n{answers_text}"
+                    
+                    if answers_text:
+                        # Split message if too long (VK limit ~4096 chars)
+                        if len(answers_text) > 4000:
+                            chunks = [answers_text[i:i+4000] for i in range(0, len(answers_text), 4000)]
+                            for chunk in chunks:
+                                await self.vk_api.send_message(
+                                    user_id=user_id,
+                                    message=chunk,
+                                    peer_id=peer_id,
+                                    keyboard=create_main_menu_keyboard()
+                                )
+                        else:
+                            await self.vk_api.send_message(
+                                user_id=user_id,
+                                message=answers_text,
+                                peer_id=peer_id,
+                                keyboard=create_main_menu_keyboard()
+                            )
+                    else:
+                        await self.vk_api.send_message(
+                            user_id=user_id,
+                            message=f"❌ Ответы не найдены.",
+                            peer_id=peer_id,
+                            keyboard=create_main_menu_keyboard()
+                        )
+                    
+                    del ADMIN_SEARCH_SESSIONS[user_id]
                     return
                 
                 # Handle course selection (1-4) when selecting user
@@ -2205,12 +2529,12 @@ class WebServer:
                 await db.update_user_field(user_id, "practice_1", 2)
                 print(f"Practice 1 button clicked for user {user_id}, practice_1 set to 2", flush=True)
                 
-                # Notify all managers (CHECK_TEST_IDS) - need to open access to final survey
-                if CHECK_TEST_IDS:
+                # Notify all managers (USER_MEN_IDS) - need to open access to final survey
+                if USER_MEN_IDS:
                     user_link = f"[id{user_id}|{user_name}]"
                     msg_template = TEXTS_DATA.get("practice_notification", "🎯 Пользователь {user_link} сдал(а) Практику в Курс 1!\n\nОткройте доступ к финальному анкетированию через АДМИН → Открыть доступ к Анкете")
                     admin_message = msg_template.format(user_link=user_link)
-                    for admin_id in CHECK_TEST_IDS:
+                    for admin_id in USER_MEN_IDS:
                         try:
                             await self.vk_api.send_message(
                                 user_id=admin_id,
@@ -2245,6 +2569,8 @@ class WebServer:
                     
                     keyboard = create_dynamic_menu_keyboard(
                         is_admin=is_admin,
+                    is_manager=is_manager,
+                    is_marketing=is_marketing,
                         form_first=form_first_status,
                         test_book_1=test_book_1_status,
                         practice_1=practice_1_status,
@@ -2303,6 +2629,8 @@ class WebServer:
                     
                     keyboard = create_dynamic_menu_keyboard(
                         is_admin=is_admin,
+                    is_manager=is_manager,
+                    is_marketing=is_marketing,
                         form_first=form_first_status,
                         test_book_1=test_book_1_status,
                         practice_1=practice_1_status,
@@ -2605,12 +2933,12 @@ class WebServer:
             print(f"Error getting user info: {e}", flush=True)
         
         # Send notification to all admins
-        if CHECK_TEST_IDS:
+        if USER_MEN_IDS:
             status = "СДАЛ" if passed else "НЕ СДАЛ"
             # Create clickable link to user profile
             user_link = f"[id{user_id}|{user_name}]"
             admin_message = f"Пользователь {user_link} {status} тест!\nРезультат: {score}/{total}"
-            for admin_id in CHECK_TEST_IDS:
+            for admin_id in USER_MEN_IDS:
                 try:
                     await self.vk_api.send_message(
                         user_id=admin_id,
@@ -2649,6 +2977,8 @@ class WebServer:
             
             keyboard = create_dynamic_menu_keyboard(
                 is_admin=is_admin,
+                    is_manager=is_manager,
+                    is_marketing=is_marketing,
                 form_first=form_first_status,
                 test_book_1=test_book_1_status,
                 practice_1=practice_1_status,
@@ -2773,6 +3103,8 @@ class WebServer:
         
         keyboard = create_dynamic_menu_keyboard(
             is_admin=is_admin,
+                    is_manager=is_manager,
+                    is_marketing=is_marketing,
             form_first=form_first_status,
             test_book_1=test_book_1_status,
             practice_1=practice_1_status,
@@ -2799,13 +3131,13 @@ class WebServer:
             keyboard=keyboard
         )
         
-        # Notify marketers (CHECK_TEST_IDS) about form completion with full answers
-        if CHECK_TEST_IDS:
+        # Notify marketers (USER_MEN_IDS) about form completion with full answers
+        if USER_MEN_IDS:
             # Create clickable link to user profile
             user_link = f"[id{user_id}|{user_name}]"
             admin_message = f"📋 Пользователь {user_link} заполнил приветственную анкету!\n\n{form_answer}"
             
-            for admin_id in CHECK_TEST_IDS:
+            for admin_id in USER_MEN_IDS:
                 try:
                     await self.vk_api.send_message(
                         user_id=admin_id,
@@ -3159,14 +3491,14 @@ class WebServer:
         
         # TODO: Send diploma to user's chat
         
-        # Notify marketers (CHECK_TEST_IDS)
-        if CHECK_TEST_IDS:
+        # Notify marketers (USER_MEN_IDS)
+        if USER_MEN_IDS:
             user_data = await db.get_user(user_id)
             user_name = user_data.get("user_name", f"ID{user_id}") if user_data else f"ID{user_id}"
             user_link = f"[id{user_id}|{user_name}]"
             msg_template = TEXTS_DATA.get("final_form_admin_notification", "🎓 Пользователь {user_link} завершил Курс {course}!\n\n{form_answers}")
             admin_message = msg_template.format(user_link=user_link, course=course, form_answers=answers_text)
-            for admin_id in CHECK_TEST_IDS:
+            for admin_id in USER_MEN_IDS:
                 try:
                     await self.vk_api.send_message(
                         user_id=admin_id,
