@@ -405,12 +405,15 @@ class Database:
         
         try:
             async with self.pool.acquire() as conn:
-                # Case-insensitive search with ILIKE
+                # Case-insensitive search with ILIKE and LOWER for reliability
+                search_lower = search_text.lower()
                 rows = await conn.fetch(
-                    "SELECT user_id, user_name, form FROM users WHERE user_name ILIKE $1 ORDER BY user_name",
-                    f"%{search_text}%"
+                    "SELECT user_id, user_name FROM users WHERE LOWER(user_name) LIKE $1 ORDER BY user_name",
+                    f"%{search_lower}%"
                 )
-                return [dict(row) for row in rows]
+                results = [dict(row) for row in rows]
+                print(f"Search '{search_text}' found {len(results)} users", flush=True)
+                return results
         except Exception as e:
             print(f"Error searching users by name '{search_text}': {e}", flush=True)
             return []
@@ -2156,20 +2159,32 @@ class WebServer:
                     await self._show_search_results(user_id, peer_id)
                     return
                 
-                # Handle "Заново" - restart search
+                # Handle "Заново" - restart search with same mode
                 if text.startswith("🔄") or text == "Заново":
+                    # Preserve the mode before clearing session
+                    current_mode = session.get("mode", "access_survey")
                     del ADMIN_SEARCH_SESSIONS[user_id]
                     ADMIN_SEARCH_SESSIONS[user_id] = {
                         "step": "search",
+                        "mode": current_mode,  # Keep the same mode
                         "search_text": "",
                         "results": [],
                         "page": 0,
                         "selected_user_id": None,
                         "selected_course": None
                     }
+                    
+                    # Show appropriate message based on mode
+                    if current_mode == "fortune_wheel":
+                        message = "🎡 Добавление вращений колеса фортуны:\n\n🔍 Введите имя или часть имени для поиска пользователя:"
+                    elif current_mode == "view_answers":
+                        message = "📋 Просмотр ответов на анкеты:\n\n🔍 Введите имя или часть имени для поиска пользователя:"
+                    else:
+                        message = TEXTS_DATA.get("admin_search_prompt_retry", "🔍 Введите имя или часть имени для поиска:")
+                    
                     await self.vk_api.send_message(
                         user_id=user_id,
-                        message=TEXTS_DATA.get("admin_search_prompt_retry", "🔍 Введите имя или часть имени для поиска:"),
+                        message=message,
                         peer_id=peer_id,
                         keyboard=create_main_menu_keyboard()
                     )
