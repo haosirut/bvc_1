@@ -1580,7 +1580,7 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
         fields = DIPLOMA_CONFIG.get("fields", {})
         
         # Load font
-        font_size = fields.get("name", {}).get("font_size", 29)
+        font_size = int(fields.get("name", {}).get("font_size", 29))
         font = ImageFont.truetype(font_path, font_size)
         
         # Draw each field
@@ -1594,16 +1594,17 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
             
             # Get position
             pos = field_config.get("position", {"x": 0, "y": 0})
-            x, y = pos.get("x", 0), pos.get("y", 0)
+            x, y = int(pos.get("x", 0)), int(pos.get("y", 0))
             
             # Get colors
             text_color = field_config.get("text_color", {"r": 0, "g": 38, "b": 148})
             stroke_color = field_config.get("stroke_color", {"r": 255, "g": 255, "b": 255})
             
-            text_rgb = (text_color.get("r", 0), text_color.get("g", 0), text_color.get("b", 0))
-            stroke_rgb = (stroke_color.get("r", 255), stroke_color.get("g", 255), stroke_color.get("b", 255))
+            text_rgb = (int(text_color.get("r", 0)), int(text_color.get("g", 0)), int(text_color.get("b", 0)))
+            stroke_rgb = (int(stroke_color.get("r", 255)), int(stroke_color.get("g", 255)), int(stroke_color.get("b", 255)))
             
-            stroke_width = field_config.get("stroke_width", 0.75)
+            # stroke_width must be integer in Pillow
+            stroke_width = int(field_config.get("stroke_width", 1))
             
             # Get text bbox for alignment
             bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
@@ -1633,9 +1634,9 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
             # Adjust for font baseline
             draw_y -= bbox[1]
             
-            # Draw text with stroke
+            # Draw text with stroke (coordinates must be integers)
             draw.text(
-                (draw_x, draw_y),
+                (int(draw_x), int(draw_y)),
                 text,
                 font=font,
                 fill=text_rgb,
@@ -1645,7 +1646,7 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
         
         # Save to bytes
         output = io.BytesIO()
-        img.save(output, format="PNG", quality=DIPLOMA_CONFIG.get("quality", 95))
+        img.save(output, format="PNG")
         img.close()
         
         return output.getvalue()
