@@ -994,6 +994,8 @@ def create_user_search_keyboard(users: List[Dict], page: int = 0, per_page: int 
     page_users = users[start_idx:end_idx]
     total_pages = (len(users) + per_page - 1) // per_page
     
+    print(f"create_user_search_keyboard: {len(users)} users, page {page}, page_users={len(page_users)}", flush=True)
+    
     buttons = []
     
     # Add user buttons (2 per row, 3 rows = 6 users)
@@ -1004,12 +1006,15 @@ def create_user_search_keyboard(users: List[Dict], page: int = 0, per_page: int 
                 user = page_users[i + j]
                 user_name = user.get("user_name", "Unknown")[:20]  # Limit button text
                 user_id = user.get("user_id")
+                print(f"  Adding button for user: {user_name} (id={user_id})", flush=True)
                 row.append({
                     "action": {"type": "text", "label": f"👤{user_name}"},
                     "color": "primary"
                 })
         if row:
             buttons.append(row)
+    
+    print(f"  Total button rows: {len(buttons)}", flush=True)
     
     # Add navigation buttons
     nav_row = [
