@@ -409,12 +409,10 @@ class Database:
         
         try:
             async with self.pool.acquire() as conn:
-                # Get all users (PostgreSQL LOWER() may not work with Cyrillic)
                 rows = await conn.fetch(
                     "SELECT user_id, user_name FROM users ORDER BY user_name"
                 )
                 
-                # Filter in Python (case-insensitive, works with Cyrillic)
                 search_lower = search_text.lower()
                 results = []
                 for row in rows:
@@ -422,15 +420,9 @@ class Database:
                     if user_name and search_lower in user_name.lower():
                         results.append(dict(row))
                 
-                print(f"Search '{search_text}' (lower='{search_lower}') found {len(results)} users", flush=True)
-                for r in results:
-                    print(f"  Found: id={r['user_id']}, name='{r['user_name']}'", flush=True)
-                
                 return results
         except Exception as e:
-            print(f"Error searching users by name '{search_text}': {e}", flush=True)
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Error searching users by name '{search_text}': {e}")
             return []
     
     async def import_users(self, users: List[Dict]) -> Dict:
@@ -1009,8 +1001,6 @@ def create_user_search_keyboard(users: List[Dict], page: int = 0, per_page: int 
     page_users = users[start_idx:end_idx]
     total_pages = (len(users) + per_page - 1) // per_page
     
-    print(f"create_user_search_keyboard: {len(users)} users, page {page}, page_users={len(page_users)}", flush=True)
-    
     buttons = []
     
     # Add user buttons (2 per row, 3 rows = 6 users)
@@ -1020,16 +1010,12 @@ def create_user_search_keyboard(users: List[Dict], page: int = 0, per_page: int 
             if i + j < len(page_users):
                 user = page_users[i + j]
                 user_name = user.get("user_name", "Unknown")[:20]  # Limit button text
-                user_id = user.get("user_id")
-                print(f"  Adding button for user: {user_name} (id={user_id})", flush=True)
                 row.append({
                     "action": {"type": "text", "label": f"👤{user_name}"},
                     "color": "primary"
                 })
         if row:
             buttons.append(row)
-    
-    print(f"  Total button rows: {len(buttons)}", flush=True)
     
     # Add navigation buttons
     nav_row = [
@@ -1463,13 +1449,10 @@ def get_correct_answer_text(question: Dict) -> str:
 def get_final_form_question(question_id) -> Optional[Dict]:
     """Get question from final form by ID (int or str)."""
     questions = FINAL_FORM_DATA.get("questions", [])
-    print(f"get_final_form_question: looking for id={question_id}, questions count={len(questions)}", flush=True)
     for q in questions:
         qid = q.get("id")
         if str(qid) == str(question_id):
-            print(f"Found question: id={qid}, type={q.get('type')}", flush=True)
             return q
-    print(f"Question not found: {question_id}. Available ids: {[q.get('id') for q in questions]}", flush=True)
     return None
 
 
@@ -3196,25 +3179,12 @@ class WebServer:
         per_page = 6
         total_pages = (len(results) + per_page - 1) // per_page if results else 1
         
-        # Debug: log all results
-        print(f"_show_search_results: {len(results)} results, mode={session.get('mode')}", flush=True)
-        for r in results:
-            print(f"  Result: id={r.get('user_id')}, name={r.get('user_name')}", flush=True)
-        
         # Create keyboard with users
         keyboard = create_user_search_keyboard(results, page, per_page)
-        
-        # Debug: log keyboard
-        print(f"Keyboard buttons: {len(keyboard.get('buttons', []))} rows", flush=True)
-        for i, row in enumerate(keyboard.get('buttons', [])):
-            labels = [btn.get('action', {}).get('label', '?') for btn in row]
-            print(f"  Row {i}: {labels}", flush=True)
         
         # Create message
         search_text = session["search_text"]
         total = len(results)
-        start_idx = page * per_page + 1
-        end_idx = min((page + 1) * per_page, total)
         
         message = f"🔍 Результаты поиска \"{search_text}\":\n\n"
         message += f"Найдено: {total} пользователей\n"
