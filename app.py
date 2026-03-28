@@ -405,14 +405,24 @@ class Database:
         
         try:
             async with self.pool.acquire() as conn:
-                # Case-insensitive search with ILIKE and LOWER for reliability
+                # Debug: show total users in database
+                total = await conn.fetchval("SELECT COUNT(*) FROM users")
+                print(f"Total users in database: {total}", flush=True)
+                
+                # Debug: show all user names
+                all_names = await conn.fetch("SELECT user_id, user_name FROM users LIMIT 20")
+                print(f"Sample users in DB:", flush=True)
+                for row in all_names:
+                    print(f"  id={row['user_id']}, name='{row['user_name']}'", flush=True)
+                
+                # Case-insensitive search with LOWER for reliability
                 search_lower = search_text.lower()
                 rows = await conn.fetch(
                     "SELECT user_id, user_name FROM users WHERE LOWER(user_name) LIKE $1 ORDER BY user_name",
                     f"%{search_lower}%"
                 )
                 results = [dict(row) for row in rows]
-                print(f"Search '{search_text}' found {len(results)} users", flush=True)
+                print(f"Search '{search_text}' (lower='{search_lower}') found {len(results)} users", flush=True)
                 return results
         except Exception as e:
             print(f"Error searching users by name '{search_text}': {e}", flush=True)
@@ -3179,10 +3189,21 @@ class WebServer:
         results = session["results"]
         page = session["page"]
         per_page = 6
-        total_pages = (len(results) + per_page - 1) // per_page
+        total_pages = (len(results) + per_page - 1) // per_page if results else 1
+        
+        # Debug: log all results
+        print(f"_show_search_results: {len(results)} results, mode={session.get('mode')}", flush=True)
+        for r in results:
+            print(f"  Result: id={r.get('user_id')}, name={r.get('user_name')}", flush=True)
         
         # Create keyboard with users
         keyboard = create_user_search_keyboard(results, page, per_page)
+        
+        # Debug: log keyboard
+        print(f"Keyboard buttons: {len(keyboard.get('buttons', []))} rows", flush=True)
+        for i, row in enumerate(keyboard.get('buttons', [])):
+            labels = [btn.get('action', {}).get('label', '?') for btn in row]
+            print(f"  Row {i}: {labels}", flush=True)
         
         # Create message
         search_text = session["search_text"]
