@@ -3671,13 +3671,39 @@ class WebServer:
         
         print(f"Final form completed for user {user_id}, course {course}", flush=True)
         
+        # Check if user is admin/manager/marketing
+        is_admin = (user_id == USER_ADMIN_ID)
+        is_manager = user_id in USER_MEN_IDS
+        is_marketing = user_id in USER_MAR_IDS
+        
+        # Get user data for keyboard
+        user_data = await db.get_user(user_id)
+        form_first_status = user_data.get("form_first", 0) if user_data else 0
+        test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
+        practice_1_status = user_data.get("practice_1", 0) if user_data else 0
+        access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
+        diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+        fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
+        
+        keyboard = create_dynamic_menu_keyboard(
+            is_admin=is_admin,
+            is_manager=is_manager,
+            is_marketing=is_marketing,
+            form_first=form_first_status,
+            test_book_1=test_book_1_status,
+            practice_1=practice_1_status,
+            access_survey_1=access_survey_1_status,
+            diploma_1=diploma_1_status,
+            fortune_wheel=fortune_wheel_spins
+        )
+        
         # Send congratulations
         congrats_text = TEXTS_DATA.get("diploma_congratulations", "Поздравляем с окончанием курса💥\nС радостью вручаем сертификат🥳")
         await self.vk_api.send_message(
             user_id=user_id,
             message=congrats_text,
             peer_id=peer_id,
-            keyboard=create_main_menu_keyboard()
+            keyboard=keyboard
         )
         
         # Generate and send diploma
@@ -3776,11 +3802,31 @@ class WebServer:
         fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
         
         if fortune_wheel_spins <= 0:
+            # Get user state for dynamic keyboard
+            is_admin = (user_id == USER_ADMIN_ID)
+            is_manager = user_id in USER_MEN_IDS
+            is_marketing = user_id in USER_MAR_IDS
+            form_first_status = user_data.get("form_first", 0) if user_data else 0
+            test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
+            practice_1_status = user_data.get("practice_1", 0) if user_data else 0
+            access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
+            diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+            
             await self.vk_api.send_message(
                 user_id=user_id,
                 message=TEXTS_DATA.get("fortune_wheel_no_spins", "У вас нет доступных вращений колеса фортуны."),
                 peer_id=peer_id,
-                keyboard=create_main_menu_keyboard()
+                keyboard=create_dynamic_menu_keyboard(
+                    is_admin=is_admin,
+                    is_manager=is_manager,
+                    is_marketing=is_marketing,
+                    form_first=form_first_status,
+                    test_book_1=test_book_1_status,
+                    practice_1=practice_1_status,
+                    access_survey_1=access_survey_1_status,
+                    diploma_1=diploma_1_status,
+                    fortune_wheel=fortune_wheel_spins
+                )
             )
             return
         
@@ -3791,13 +3837,38 @@ class WebServer:
         # Decrease fortune wheel spins
         await db.increment_fortune_wheel(user_id, -1)
         
+        # Get updated user data for keyboard
+        user_data = await db.get_user(user_id)
+        fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
+        
+        is_admin = (user_id == USER_ADMIN_ID)
+        is_manager = user_id in USER_MEN_IDS
+        is_marketing = user_id in USER_MAR_IDS
+        form_first_status = user_data.get("form_first", 0) if user_data else 0
+        test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
+        practice_1_status = user_data.get("practice_1", 0) if user_data else 0
+        access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
+        diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+        
+        keyboard = create_dynamic_menu_keyboard(
+            is_admin=is_admin,
+            is_manager=is_manager,
+            is_marketing=is_marketing,
+            form_first=form_first_status,
+            test_book_1=test_book_1_status,
+            practice_1=practice_1_status,
+            access_survey_1=access_survey_1_status,
+            diploma_1=diploma_1_status,
+            fortune_wheel=fortune_wheel_spins
+        )
+        
         # Notify about prize
         result_text = TEXTS_DATA.get("fortune_wheel_result", "🎉 Поздравляем! Вам выпало:\n\n🎁 {prize}")
         await self.vk_api.send_message(
             user_id=user_id,
             message=result_text.format(prize=prize),
             peer_id=peer_id,
-            keyboard=create_main_menu_keyboard()
+            keyboard=keyboard
         )
         
         # Send instructions for getting prize
@@ -3810,7 +3881,7 @@ class WebServer:
             user_id=user_id,
             message=instruction_text,
             peer_id=peer_id,
-            keyboard=create_main_menu_keyboard()
+            keyboard=keyboard
         )
 
 
