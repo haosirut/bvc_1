@@ -25,9 +25,9 @@
       "alignment": "center",
       "vertical_align": "bottom",
       "uppercase": true,
-      "font_size_percent": 3.5,
-      "stroke_width_percent": 7.0,
-      "text_color": {"r": 28, "g": 58, "b": 105},
+      "font_size_percent": 5.0,
+      "stroke_width_percent": 5.0,
+      "text_color": {"r": 2, "g": 53, "b": 112},
       "stroke_color": {"r": 255, "g": 255, "b": 255}
     },
     "date": {
@@ -36,9 +36,9 @@
       "alignment": "center",
       "vertical_align": "bottom",
       "uppercase": true,
-      "font_size_percent": 3.5,
-      "stroke_width_percent": 7.0,
-      "text_color": {"r": 28, "g": 58, "b": 105},
+      "font_size_percent": 4.0,
+      "stroke_width_percent": 5.0,
+      "text_color": {"r": 2, "g": 53, "b": 112},
       "stroke_color": {"r": 255, "g": 255, "b": 255}
     }
   },
