@@ -1,0 +1,45 @@
+{
+  "courses": {
+    "1": {
+      "template": "sert/sert_1.png",
+      "enabled": true
+    },
+    "2": {
+      "template": "sert/sert_2.png",
+      "enabled": true
+    },
+    "3": {
+      "template": "sert/sert_3.png",
+      "enabled": true
+    },
+    "4": {
+      "template": null,
+      "enabled": false
+    }
+  },
+  "font": "sert/Russo_One.ttf",
+  "fields": {
+    "name": {
+      "position": {"x": 297.67, "y": 192},
+      "alignment": "center",
+      "vertical_align": "bottom",
+      "uppercase": true,
+      "font_size": 29,
+      "stroke_width": 0.75,
+      "text_color": {"r": 0, "g": 38, "b": 148},
+      "stroke_color": {"r": 255, "g": 255, "b": 255}
+    },
+    "date": {
+      "position": {"x": 135, "y": 370},
+      "alignment": "center",
+      "vertical_align": "bottom",
+      "uppercase": true,
+      "font_size": 29,
+      "stroke_width": 0.75,
+      "text_color": {"r": 0, "g": 38, "b": 148},
+      "stroke_color": {"r": 255, "g": 255, "b": 255}
+    }
+  },
+  "output_format": "PNG",
+  "quality": 95
+}

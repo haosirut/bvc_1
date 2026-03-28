@@ -14,6 +14,7 @@ from aiohttp import web
 import asyncpg
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from PIL import Image, ImageDraw, ImageFont
 
 # Force unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
@@ -88,6 +89,7 @@ TESTS_DATA = load_json_file("tests.json")
 TEXTS_DATA = load_json_file("texts.json")
 FORM_DATA = load_json_file("form.json")
 FINAL_FORM_DATA = load_json_file("final_form_1.json")
+DIPLOMA_CONFIG = load_json_file("diploma_config.json")
 
 # -----------------------------------------------------------------------------
 # User Sessions Storage (in-memory)
@@ -657,8 +659,19 @@ class VKAPI:
             await self.init()
         
         try:
+            # Determine content type by file extension
+            ext = filename.lower().split('.')[-1] if '.' in filename else ''
+            content_types = {
+                'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'png': 'image/png',
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'pdf': 'application/pdf'
+            }
+            content_type = content_types.get(ext, 'application/octet-stream')
+            
             form = aiohttp.FormData()
-            form.add_field('file', file_data, filename=filename, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            form.add_field('file', file_data, filename=filename, content_type=content_type)
             
             async with self.session.post(upload_url, data=form) as resp:
                 result = await resp.json()
@@ -1516,6 +1529,130 @@ def is_physical_prize(prize_name: str) -> bool:
     """Check if prize is a physical item that needs to be picked up."""
     physical_prizes = FINAL_FORM_DATA.get("fortune_wheel", {}).get("physical_prizes", [])
     return prize_name in physical_prizes
+
+
+# -----------------------------------------------------------------------------
+# Diploma Generation
+# -----------------------------------------------------------------------------
+def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
+    """Generate diploma image with name and date.
+    
+    Args:
+        course: Course number (1-4)
+        name: User name in dative case (ФИ_датпад)
+        date_str: Date string to put on diploma
+        
+    Returns:
+        PNG image as bytes or None if failed
+    """
+    if not DIPLOMA_CONFIG:
+        logger.error("Diploma config not loaded")
+        return None
+    
+    course_config = DIPLOMA_CONFIG.get("courses", {}).get(str(course))
+    if not course_config or not course_config.get("enabled"):
+        logger.warning(f"Diploma not available for course {course}")
+        return None
+    
+    template_path = course_config.get("template")
+    if not template_path:
+        logger.error(f"No template for course {course}")
+        return None
+    
+    # Full path to template
+    template_full_path = os.path.join(BASE_DIR, template_path)
+    if not os.path.exists(template_full_path):
+        logger.error(f"Template not found: {template_full_path}")
+        return None
+    
+    # Load font
+    font_path = os.path.join(BASE_DIR, DIPLOMA_CONFIG.get("font", "sert/Russo_One.ttf"))
+    if not os.path.exists(font_path):
+        logger.error(f"Font not found: {font_path}")
+        return None
+    
+    try:
+        # Open template image
+        img = Image.open(template_full_path)
+        draw = ImageDraw.Draw(img)
+        
+        # Get field configs
+        fields = DIPLOMA_CONFIG.get("fields", {})
+        
+        # Load font
+        font_size = fields.get("name", {}).get("font_size", 29)
+        font = ImageFont.truetype(font_path, font_size)
+        
+        # Draw each field
+        for field_name, field_config in fields.items():
+            if field_name == "name":
+                text = name.upper() if field_config.get("uppercase", True) else name
+            elif field_name == "date":
+                text = date_str.upper() if field_config.get("uppercase", True) else date_str
+            else:
+                continue
+            
+            # Get position
+            pos = field_config.get("position", {"x": 0, "y": 0})
+            x, y = pos.get("x", 0), pos.get("y", 0)
+            
+            # Get colors
+            text_color = field_config.get("text_color", {"r": 0, "g": 38, "b": 148})
+            stroke_color = field_config.get("stroke_color", {"r": 255, "g": 255, "b": 255})
+            
+            text_rgb = (text_color.get("r", 0), text_color.get("g", 0), text_color.get("b", 0))
+            stroke_rgb = (stroke_color.get("r", 255), stroke_color.get("g", 255), stroke_color.get("b", 255))
+            
+            stroke_width = field_config.get("stroke_width", 0.75)
+            
+            # Get text bbox for alignment
+            bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            # Apply alignment
+            alignment = field_config.get("alignment", "center")
+            vertical_align = field_config.get("vertical_align", "bottom")
+            
+            # Horizontal alignment
+            if alignment == "center":
+                draw_x = x - text_width / 2
+            elif alignment == "right":
+                draw_x = x - text_width
+            else:  # left
+                draw_x = x
+            
+            # Vertical alignment
+            if vertical_align == "bottom":
+                draw_y = y - text_height
+            elif vertical_align == "center":
+                draw_y = y - text_height / 2
+            else:  # top
+                draw_y = y
+            
+            # Adjust for font baseline
+            draw_y -= bbox[1]
+            
+            # Draw text with stroke
+            draw.text(
+                (draw_x, draw_y),
+                text,
+                font=font,
+                fill=text_rgb,
+                stroke_width=stroke_width,
+                stroke_fill=stroke_rgb
+            )
+        
+        # Save to bytes
+        output = io.BytesIO()
+        img.save(output, format="PNG", quality=DIPLOMA_CONFIG.get("quality", 95))
+        img.close()
+        
+        return output.getvalue()
+        
+    except Exception as e:
+        logger.error(f"Error generating diploma: {e}")
+        return None
 
 
 # -----------------------------------------------------------------------------
@@ -3505,7 +3642,29 @@ class WebServer:
             keyboard=create_main_menu_keyboard()
         )
         
-        # TODO: Send diploma to user's chat
+        # Generate and send diploma
+        try:
+            user_data = await db.get_user(user_id)
+            user_name_case = user_data.get("user_name_case", "") if user_data else ""
+            if not user_name_case:
+                user_name_case = user_data.get("user_name", "Участник") if user_data else "Участник"
+            
+            # Get current date
+            today = datetime.now()
+            date_str = today.strftime("%d.%m.%Y")
+            
+            # Generate diploma
+            diploma_data = generate_diploma(course, user_name_case, date_str)
+            if diploma_data:
+                filename = f"diploma_course_{course}_{user_id}.png"
+                await self.vk_api.send_document(
+                    peer_id=peer_id,
+                    file_data=diploma_data,
+                    filename=filename,
+                    message="🎓 Ваш диплом:"
+                )
+        except Exception as e:
+            logger.error(f"Failed to send diploma to user {user_id}: {e}")
         
         # Notify marketers (USER_MEN_IDS)
         if USER_MEN_IDS:
