@@ -421,12 +421,29 @@ class Database:
                 search_pattern = f"%{search_lower}%"
                 print(f"DEBUG: search_pattern = '{search_pattern}'", flush=True)
                 
-                # Test: manually check each name
-                print(f"DEBUG: Manual check for '{search_lower}':", flush=True)
+                # Test: manually check each name in Python
+                print(f"DEBUG: Python manual check for '{search_lower}':", flush=True)
                 for row in all_names:
                     name_lower = row['user_name'].lower() if row['user_name'] else ''
                     contains = search_lower in name_lower
                     print(f"  '{row['user_name']}' lower='{name_lower}' contains '{search_lower}': {contains}", flush=True)
+                
+                # Test: Check what PostgreSQL LOWER() returns for each name
+                print(f"DEBUG: PostgreSQL LOWER() test:", flush=True)
+                for row in all_names:
+                    pg_lower = await conn.fetchval(
+                        "SELECT LOWER($1)", row['user_name']
+                    )
+                    print(f"  PostgreSQL LOWER('{row['user_name']}') = '{pg_lower}'", flush=True)
+                
+                # Test: Check if PostgreSQL sees 'нов' in each name
+                print(f"DEBUG: PostgreSQL LIKE test for each name:", flush=True)
+                for row in all_names:
+                    like_result = await conn.fetchval(
+                        "SELECT CASE WHEN LOWER($1) LIKE $2 THEN 1 ELSE 0 END",
+                        row['user_name'], search_pattern
+                    )
+                    print(f"  PostgreSQL: LOWER('{row['user_name']}') LIKE '{search_pattern}' = {like_result}", flush=True)
                 
                 # Test query 1: with parameter binding
                 print(f"DEBUG: Test query with parameter binding", flush=True)
@@ -440,22 +457,7 @@ class Database:
                 for row in rows:
                     print(f"  SQL row: id={row['user_id']}, name='{row['user_name']}'", flush=True)
                 
-                # Test query 2: direct SQL (unsafe but for debugging)
-                # Use string concatenation to see if parameter binding is the issue
-                print(f"DEBUG: Test query with direct SQL (no binding)", flush=True)
-                direct_sql = f"SELECT user_id, user_name FROM users WHERE LOWER(user_name) LIKE '%{search_lower}%' ORDER BY user_name"
-                print(f"DEBUG: Direct SQL = {direct_sql}", flush=True)
-                rows_direct = await conn.fetch(direct_sql)
-                print(f"DEBUG: SQL (direct) returned {len(rows_direct)} rows:", flush=True)
-                for row in rows_direct:
-                    print(f"  Direct SQL row: id={row['user_id']}, name='{row['user_name']}'", flush=True)
-                
-                # Use the direct query result for now if it works better
-                if rows_direct and not rows:
-                    results = [dict(row) for row in rows_direct]
-                else:
-                    results = [dict(row) for row in rows]
-                
+                results = [dict(row) for row in rows]
                 print(f"Search '{search_text}' (lower='{search_lower}') found {len(results)} users", flush=True)
                 return results
         except Exception as e:
