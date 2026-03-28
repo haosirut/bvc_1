@@ -399,66 +399,33 @@ class Database:
             return False
     
     async def search_users_by_name(self, search_text: str) -> List[Dict]:
-        """Search users by name (case-insensitive partial match)."""
+        """Search users by name (case-insensitive partial match).
+        
+        Note: PostgreSQL LOWER() doesn't work correctly with Cyrillic characters
+        on some systems due to locale settings. We fetch all users and filter in Python.
+        """
         if not self.pool:
             return []
         
         try:
             async with self.pool.acquire() as conn:
-                # Debug: show total users in database
-                total = await conn.fetchval("SELECT COUNT(*) FROM users")
-                print(f"Total users in database: {total}", flush=True)
-                
-                # Debug: show all user names with their LOWER versions
-                all_names = await conn.fetch("SELECT user_id, user_name FROM users LIMIT 20")
-                print(f"Sample users in DB:", flush=True)
-                for row in all_names:
-                    name_lower = row['user_name'].lower() if row['user_name'] else ''
-                    print(f"  id={row['user_id']}, name='{row['user_name']}', lower='{name_lower}'", flush=True)
-                
-                # Case-insensitive search with LOWER for reliability
-                search_lower = search_text.lower()
-                search_pattern = f"%{search_lower}%"
-                print(f"DEBUG: search_pattern = '{search_pattern}'", flush=True)
-                
-                # Test: manually check each name in Python
-                print(f"DEBUG: Python manual check for '{search_lower}':", flush=True)
-                for row in all_names:
-                    name_lower = row['user_name'].lower() if row['user_name'] else ''
-                    contains = search_lower in name_lower
-                    print(f"  '{row['user_name']}' lower='{name_lower}' contains '{search_lower}': {contains}", flush=True)
-                
-                # Test: Check what PostgreSQL LOWER() returns for each name
-                print(f"DEBUG: PostgreSQL LOWER() test:", flush=True)
-                for row in all_names:
-                    pg_lower = await conn.fetchval(
-                        "SELECT LOWER($1)", row['user_name']
-                    )
-                    print(f"  PostgreSQL LOWER('{row['user_name']}') = '{pg_lower}'", flush=True)
-                
-                # Test: Check if PostgreSQL sees 'нов' in each name
-                print(f"DEBUG: PostgreSQL LIKE test for each name:", flush=True)
-                for row in all_names:
-                    like_result = await conn.fetchval(
-                        "SELECT CASE WHEN LOWER($1) LIKE $2 THEN 1 ELSE 0 END",
-                        row['user_name'], search_pattern
-                    )
-                    print(f"  PostgreSQL: LOWER('{row['user_name']}') LIKE '{search_pattern}' = {like_result}", flush=True)
-                
-                # Test query 1: with parameter binding
-                print(f"DEBUG: Test query with parameter binding", flush=True)
+                # Get all users (PostgreSQL LOWER() may not work with Cyrillic)
                 rows = await conn.fetch(
-                    "SELECT user_id, user_name FROM users WHERE LOWER(user_name) LIKE $1 ORDER BY user_name",
-                    search_pattern
+                    "SELECT user_id, user_name FROM users ORDER BY user_name"
                 )
                 
-                # Debug: show actual rows returned by SQL
-                print(f"DEBUG: SQL (param binding) returned {len(rows)} rows:", flush=True)
+                # Filter in Python (case-insensitive, works with Cyrillic)
+                search_lower = search_text.lower()
+                results = []
                 for row in rows:
-                    print(f"  SQL row: id={row['user_id']}, name='{row['user_name']}'", flush=True)
+                    user_name = row['user_name']
+                    if user_name and search_lower in user_name.lower():
+                        results.append(dict(row))
                 
-                results = [dict(row) for row in rows]
                 print(f"Search '{search_text}' (lower='{search_lower}') found {len(results)} users", flush=True)
+                for r in results:
+                    print(f"  Found: id={r['user_id']}, name='{r['user_name']}'", flush=True)
+                
                 return results
         except Exception as e:
             print(f"Error searching users by name '{search_text}': {e}", flush=True)
