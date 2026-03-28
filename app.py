@@ -409,23 +409,59 @@ class Database:
                 total = await conn.fetchval("SELECT COUNT(*) FROM users")
                 print(f"Total users in database: {total}", flush=True)
                 
-                # Debug: show all user names
+                # Debug: show all user names with their LOWER versions
                 all_names = await conn.fetch("SELECT user_id, user_name FROM users LIMIT 20")
                 print(f"Sample users in DB:", flush=True)
                 for row in all_names:
-                    print(f"  id={row['user_id']}, name='{row['user_name']}'", flush=True)
+                    name_lower = row['user_name'].lower() if row['user_name'] else ''
+                    print(f"  id={row['user_id']}, name='{row['user_name']}', lower='{name_lower}'", flush=True)
                 
                 # Case-insensitive search with LOWER for reliability
                 search_lower = search_text.lower()
+                search_pattern = f"%{search_lower}%"
+                print(f"DEBUG: search_pattern = '{search_pattern}'", flush=True)
+                
+                # Test: manually check each name
+                print(f"DEBUG: Manual check for '{search_lower}':", flush=True)
+                for row in all_names:
+                    name_lower = row['user_name'].lower() if row['user_name'] else ''
+                    contains = search_lower in name_lower
+                    print(f"  '{row['user_name']}' lower='{name_lower}' contains '{search_lower}': {contains}", flush=True)
+                
+                # Test query 1: with parameter binding
+                print(f"DEBUG: Test query with parameter binding", flush=True)
                 rows = await conn.fetch(
                     "SELECT user_id, user_name FROM users WHERE LOWER(user_name) LIKE $1 ORDER BY user_name",
-                    f"%{search_lower}%"
+                    search_pattern
                 )
-                results = [dict(row) for row in rows]
+                
+                # Debug: show actual rows returned by SQL
+                print(f"DEBUG: SQL (param binding) returned {len(rows)} rows:", flush=True)
+                for row in rows:
+                    print(f"  SQL row: id={row['user_id']}, name='{row['user_name']}'", flush=True)
+                
+                # Test query 2: direct SQL (unsafe but for debugging)
+                # Use string concatenation to see if parameter binding is the issue
+                print(f"DEBUG: Test query with direct SQL (no binding)", flush=True)
+                direct_sql = f"SELECT user_id, user_name FROM users WHERE LOWER(user_name) LIKE '%{search_lower}%' ORDER BY user_name"
+                print(f"DEBUG: Direct SQL = {direct_sql}", flush=True)
+                rows_direct = await conn.fetch(direct_sql)
+                print(f"DEBUG: SQL (direct) returned {len(rows_direct)} rows:", flush=True)
+                for row in rows_direct:
+                    print(f"  Direct SQL row: id={row['user_id']}, name='{row['user_name']}'", flush=True)
+                
+                # Use the direct query result for now if it works better
+                if rows_direct and not rows:
+                    results = [dict(row) for row in rows_direct]
+                else:
+                    results = [dict(row) for row in rows]
+                
                 print(f"Search '{search_text}' (lower='{search_lower}') found {len(results)} users", flush=True)
                 return results
         except Exception as e:
             print(f"Error searching users by name '{search_text}': {e}", flush=True)
+            import traceback
+            traceback.print_exc()
             return []
     
     async def import_users(self, users: List[Dict]) -> Dict:
