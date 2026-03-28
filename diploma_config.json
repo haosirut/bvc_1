@@ -20,23 +20,25 @@
   "font": "sert/RussoOne-Regular.ttf",
   "fields": {
     "name": {
-      "position": {"x": 298, "y": 192},
+      "top_percent": 46.6,
+      "left_percent": 50.0,
       "alignment": "center",
       "vertical_align": "bottom",
       "uppercase": true,
-      "font_size": 29,
-      "stroke_width": 1,
-      "text_color": {"r": 0, "g": 38, "b": 148},
+      "font_size_percent": 3.5,
+      "stroke_width_percent": 7.0,
+      "text_color": {"r": 28, "g": 58, "b": 105},
       "stroke_color": {"r": 255, "g": 255, "b": 255}
     },
     "date": {
-      "position": {"x": 135, "y": 370},
+      "top_percent": 88.6,
+      "left_percent": 22.8,
       "alignment": "center",
       "vertical_align": "bottom",
       "uppercase": true,
-      "font_size": 29,
-      "stroke_width": 1,
-      "text_color": {"r": 0, "g": 38, "b": 148},
+      "font_size_percent": 3.5,
+      "stroke_width_percent": 7.0,
+      "text_color": {"r": 28, "g": 58, "b": 105},
       "stroke_color": {"r": 255, "g": 255, "b": 255}
     }
   },

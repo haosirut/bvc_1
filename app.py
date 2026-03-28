@@ -1566,7 +1566,7 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
         return None
     
     # Load font
-    font_path = os.path.join(BASE_DIR, DIPLOMA_CONFIG.get("font", "sert/Russo_One.ttf"))
+    font_path = os.path.join(BASE_DIR, DIPLOMA_CONFIG.get("font", "sert/RussoOne-Regular.ttf"))
     if not os.path.exists(font_path):
         logger.error(f"Font not found: {font_path}")
         return None
@@ -1576,12 +1576,11 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
         img = Image.open(template_full_path)
         draw = ImageDraw.Draw(img)
         
+        # Get image dimensions
+        img_width, img_height = img.size
+        
         # Get field configs
         fields = DIPLOMA_CONFIG.get("fields", {})
-        
-        # Load font
-        font_size = int(fields.get("name", {}).get("font_size", 29))
-        font = ImageFont.truetype(font_path, font_size)
         
         # Draw each field
         for field_name, field_config in fields.items():
@@ -1592,19 +1591,30 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
             else:
                 continue
             
-            # Get position
-            pos = field_config.get("position", {"x": 0, "y": 0})
-            x, y = int(pos.get("x", 0)), int(pos.get("y", 0))
+            # Calculate font size from percentage of image height
+            font_size_percent = field_config.get("font_size_percent", 3.5)
+            font_size = int(img_height * font_size_percent / 100)
+            font = ImageFont.truetype(font_path, font_size)
+            
+            # Calculate stroke width from percentage of font size
+            stroke_width_percent = field_config.get("stroke_width_percent", 7.0)
+            stroke_width = int(font_size * stroke_width_percent / 100)
+            
+            # Calculate position from percentages
+            top_percent = field_config.get("top_percent", 50)
+            left_percent = field_config.get("left_percent", 50)
+            
+            # Y position from top (percentage of image height)
+            y = int(img_height * top_percent / 100)
+            # X position from left (percentage of image width)
+            x = int(img_width * left_percent / 100)
             
             # Get colors
-            text_color = field_config.get("text_color", {"r": 0, "g": 38, "b": 148})
+            text_color = field_config.get("text_color", {"r": 28, "g": 58, "b": 105})
             stroke_color = field_config.get("stroke_color", {"r": 255, "g": 255, "b": 255})
             
-            text_rgb = (int(text_color.get("r", 0)), int(text_color.get("g", 0)), int(text_color.get("b", 0)))
+            text_rgb = (int(text_color.get("r", 28)), int(text_color.get("g", 58)), int(text_color.get("b", 105)))
             stroke_rgb = (int(stroke_color.get("r", 255)), int(stroke_color.get("g", 255)), int(stroke_color.get("b", 255)))
-            
-            # stroke_width must be integer in Pillow
-            stroke_width = int(field_config.get("stroke_width", 1))
             
             # Get text bbox for alignment
             bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
