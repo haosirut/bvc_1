@@ -1955,6 +1955,43 @@ class WebServer:
             print(f"ERROR: {e}", flush=True)
             return web.Response(text="ok")
 
+    async def _send_user_menu(self, user_id: int, peer_id: int, message: str = "Выберите действие:") -> None:
+        """Send user's main menu with dynamic keyboard based on their state."""
+        # Get user data
+        user_data = await db.get_user(user_id)
+        
+        # Check user roles
+        is_admin = (user_id == USER_ADMIN_ID)
+        is_manager = (user_id in USER_MEN_IDS)
+        is_marketing = (user_id in USER_MAR_IDS)
+        
+        # Get user state
+        form_first_status = user_data.get("form_first", 0) if user_data else 0
+        test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
+        practice_1_status = user_data.get("practice_1", 0) if user_data else 0
+        access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
+        diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+        fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
+        
+        keyboard = create_dynamic_menu_keyboard(
+            is_admin=is_admin,
+            is_manager=is_manager,
+            is_marketing=is_marketing,
+            form_first=form_first_status,
+            test_book_1=test_book_1_status,
+            practice_1=practice_1_status,
+            access_survey_1=access_survey_1_status,
+            diploma_1=diploma_1_status,
+            fortune_wheel=fortune_wheel_spins
+        )
+        
+        await self.vk_api.send_message(
+            user_id=user_id,
+            message=message,
+            peer_id=peer_id,
+            keyboard=keyboard
+        )
+
     async def _handle_message_new(self, data: Dict) -> None:
         try:
             if not self.vk_api:
@@ -2563,8 +2600,9 @@ class WebServer:
                     del ADMIN_SEARCH_SESSIONS[user_id]
                     return
                 
-                # Handle search text input
-                if session["step"] == "search" and text:
+                # Handle search text input (only if not a menu command)
+                menu_commands = ["меню", "админ", "менеджер", "маркетинг", "финальная анкета", "финальное анкетирование"]
+                if session["step"] == "search" and text and text.lower() not in menu_commands:
                     # Search users by name
                     results = await db.search_users_by_name(text)
                     
@@ -2586,8 +2624,8 @@ class WebServer:
                     await self._show_search_results(user_id, peer_id)
                     return
             
-            # Handle "Финальное анкетирование" button
-            if text.lower() == "финальное анкетирование":
+            # Handle "Финальная анкета" / "Финальное анкетирование" button
+            if text.lower() in ["финальная анкета", "финальное анкетирование"]:
                 # Determine which course the user has access to (access_survey_X == 1)
                 user_data = await db.get_user(user_id)
                 course = None
