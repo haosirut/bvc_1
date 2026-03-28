@@ -2806,7 +2806,7 @@ class WebServer:
             
             # Handle "Скачать диплом" button
             if text.lower() == "скачать диплом":
-                # Check if user has diploma available (diploma_1 == 1)
+                # Check if user has diploma available (diploma_X == 1)
                 user_data = await db.get_user(user_id)
                 diploma_status = None
                 course = None
@@ -2826,14 +2826,41 @@ class WebServer:
                     )
                     return
                 
-                # TODO: Generate and send diploma
-                # For now, just show a message
-                await self.vk_api.send_message(
-                    user_id=user_id,
-                    message=TEXTS_DATA.get("diploma_download", "🎓 Ваш диплом готов! Скоро он будет отправлен в чат."),
-                    peer_id=peer_id,
-                    keyboard=create_main_menu_keyboard()
-                )
+                # Generate and send diploma
+                try:
+                    user_name_case = user_data.get("user_name_case", "") if user_data else ""
+                    if not user_name_case:
+                        user_name_case = user_data.get("user_name", "Участник") if user_data else "Участник"
+                    
+                    # Get current date
+                    today = datetime.now()
+                    date_str = today.strftime("%d.%m.%Y")
+                    
+                    # Generate diploma
+                    diploma_data = generate_diploma(course, user_name_case, date_str)
+                    if diploma_data:
+                        filename = f"diploma_course_{course}_{user_id}.png"
+                        await self.vk_api.send_document(
+                            peer_id=peer_id,
+                            file_data=diploma_data,
+                            filename=filename,
+                            message="🎓 Ваш диплом:"
+                        )
+                    else:
+                        await self.vk_api.send_message(
+                            user_id=user_id,
+                            message="Ошибка при генерации диплома. Обратитесь к администратору.",
+                            peer_id=peer_id,
+                            keyboard=create_main_menu_keyboard()
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to send diploma to user {user_id}: {e}")
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message="Ошибка при отправке диплома. Обратитесь к администратору.",
+                        peer_id=peer_id,
+                        keyboard=create_main_menu_keyboard()
+                    )
                 return
             
             # Handle "Пройти заново" button
