@@ -65,5 +65,8 @@
 
   "use_buttons_message": "Пожалуйста, используйте кнопки для ответа.",
   "rating_range_message": "Пожалуйста, введите число от {min} до {max}.",
-  "rating_number_message": "Пожалуйста, введите число от {min} до {max}."
+  "rating_number_message": "Пожалуйста, введите число от {min} до {max}.",
+
+  "edit_komu_vydan_prompt": "✏️ Текущее значение \"Кому выдан\" для пользователя {user_name}:\n\n{current_value}\n\nВведите новое значение:",
+  "edit_komu_vydan_success": "✅ Поле \"Кому выдан\" обновлено для пользователя {user_name}:\n\n{new_value}"
 }

@@ -158,7 +158,7 @@ class Database:
                         user_id BIGINT PRIMARY KEY,
                         user_name TEXT,
                         user_name_case TEXT DEFAULT '',
-                        "ФИ_датпад" TEXT DEFAULT 'Иванову Ивану',
+                        "komu_vydan" TEXT DEFAULT 'Иванову Ивану',
                         form_first INTEGER DEFAULT 0,
                         form_first_answer TEXT DEFAULT '',
                         test_book_1 INTEGER DEFAULT 0,
@@ -192,7 +192,7 @@ class Database:
             async with self.pool.acquire() as conn:
                 new_columns = [
                     ("user_name_case", "TEXT DEFAULT ''"),
-                    ("\"ФИ_датпад\"", "TEXT DEFAULT 'Иванову Ивану'"),
+                    ("\"komu_vydan\"", "TEXT DEFAULT 'Иванову Ивану'"),
                     ("form_first", "INTEGER DEFAULT 0"),
                     ("form_first_answer", "TEXT DEFAULT ''"),
                     ("test_book_1", "INTEGER DEFAULT 0"),
@@ -341,7 +341,7 @@ class Database:
         try:
             async with self.pool.acquire() as conn:
                 await conn.execute('''
-                    INSERT INTO users (user_id, user_name, "ФИ_датпад", form_first, form_first_answer, 
+                    INSERT INTO users (user_id, user_name, "komu_vydan", form_first, form_first_answer, 
                                        test_book_1, test_book_2, test_book_3, test_book_4,
                                        practice_1, practice_2, practice_3, practice_4,
                                        access_survey_1, access_survey_2, access_survey_3, access_survey_4,
@@ -363,7 +363,7 @@ class Database:
         allowed_fields = [
             'form_first', 'form_first_answer', 
             'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 
-            'user_name', 'user_name_case', '"ФИ_датпад"',
+            'user_name', 'user_name_case', '"komu_vydan"',
             'practice_1', 'practice_2', 'practice_3', 'practice_4',
             'access_survey_1', 'access_survey_2', 'access_survey_3', 'access_survey_4',
             'form_end_1', 'form_end_2', 'form_end_3', 'form_end_4',
@@ -452,7 +452,7 @@ class Database:
                         await conn.execute('''
                             UPDATE users SET
                                 user_name = $2,
-                                user_name_case = $3,
+                                "komu_vydan" = $3,
                                 form_first = $4,
                                 form_first_answer = $5,
                                 fortune_wheel = $6,
@@ -466,7 +466,7 @@ class Database:
                         ''',
                             user_id,
                             user.get("user_name", ""),
-                            user.get("user_name_case", ""),
+                            user.get("komu_vydan", ""),
                             user.get("form_first", 0),
                             user.get("form_first_answer", ""),
                             user.get("fortune_wheel", 0),
@@ -486,7 +486,7 @@ class Database:
                         # Create new user
                         await conn.execute('''
                             INSERT INTO users (
-                                user_id, user_name, user_name_case,
+                                user_id, user_name, "komu_vydan",
                                 form_first, form_first_answer, fortune_wheel,
                                 test_book_1, test_book_2, test_book_3, test_book_4,
                                 practice_1, practice_2, practice_3, practice_4,
@@ -499,7 +499,7 @@ class Database:
                         ''',
                             user_id,
                             user.get("user_name", ""),
-                            user.get("user_name_case", ""),
+                            user.get("komu_vydan", ""),
                             user.get("form_first", 0),
                             user.get("form_first_answer", ""),
                             user.get("fortune_wheel", 0),
@@ -927,6 +927,12 @@ def create_manager_keyboard() -> Dict:
             [
                 {
                     "action": {"type": "text", "label": "Открыть доступ к финальной анкете"},
+                    "color": "primary"
+                }
+            ],
+            [
+                {
+                    "action": {"type": "text", "label": "Изменить поле Кому выдан"},
                     "color": "primary"
                 }
             ],
@@ -1535,7 +1541,7 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
     
     Args:
         course: Course number (1-4)
-        name: User name in dative case (ФИ_датпад)
+        name: User name in dative case (komu_vydan)
         date_str: Date string to put on diploma
         
     Returns:
@@ -1675,7 +1681,7 @@ def create_users_xlsx(users: List[Dict]) -> bytes:
     headers = [
         "ID пользователя",
         "Имя",
-        "Имя в падеже",
+        "Кому выдан",
         "Начальная анкета",
         "Ответ нач. анкеты",
         "Колесо фортуны",
@@ -1755,7 +1761,7 @@ def create_users_xlsx(users: List[Dict]) -> bytes:
         row_data = [
             user.get("user_id", ""),
             user.get("user_name", ""),
-            user.get("user_name_case", ""),
+            user.get("komu_vydan", ""),
             status_ru(user.get("form_first", 0)),
             user.get("form_first_answer", ""),
             user.get("fortune_wheel", 0),
@@ -1852,7 +1858,7 @@ def parse_users_xlsx(file_data: bytes) -> List[Dict]:
         user = {
             "user_id": row[header_map.get("ID пользователя", 0)],
             "user_name": row[header_map.get("Имя", 1)] or "",
-            "user_name_case": row[header_map.get("Имя в падеже", 2)] or "",
+            "komu_vydan": row[header_map.get("Кому выдан", 2)] or "",
             "form_first": parse_status(row[header_map.get("Начальная анкета", 3)]),
             "form_first_answer": row[header_map.get("Ответ нач. анкеты", 4)] or "",
             "fortune_wheel": int(row[header_map.get("Колесо фортуны", 5)] or 0),
@@ -2304,6 +2310,30 @@ class WebServer:
                 }
                 return
             
+            # Handle "Изменить поле Кому выдан" button - for admin and managers
+            if text.lower() == "изменить поле кому выдан" and (is_admin or is_manager):
+                # Clear any existing admin search session
+                if user_id in ADMIN_SEARCH_SESSIONS:
+                    del ADMIN_SEARCH_SESSIONS[user_id]
+                
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="✏️ Изменение поля \"Кому выдан\":\n\n🔍 Введите имя или часть имени для поиска пользователя:",
+                    peer_id=peer_id,
+                    keyboard=create_main_menu_keyboard()
+                )
+                # Start admin search session for editing komu_vydan
+                ADMIN_SEARCH_SESSIONS[user_id] = {
+                    "step": "search",
+                    "mode": "edit_komu_vydan",
+                    "search_text": "",
+                    "results": [],
+                    "page": 0,
+                    "selected_user_id": None,
+                    "selected_course": None
+                }
+                return
+            
             # Handle "Посмотреть ответы на анкеты" button - for admin and marketing
             if text.lower() == "посмотреть ответы на анкеты" and (is_admin or is_marketing):
                 # Clear any existing admin search session
@@ -2362,6 +2392,8 @@ class WebServer:
                     # Show appropriate message based on mode
                     if current_mode == "fortune_wheel":
                         message = "🎡 Добавление вращений колеса фортуны:\n\n🔍 Введите имя или часть имени для поиска пользователя:"
+                    elif current_mode == "edit_komu_vydan":
+                        message = '✏️ Изменение поля "Кому выдан":\n\n🔍 Введите имя или часть имени для поиска пользователя:'
                     elif current_mode == "view_answers":
                         message = "📋 Просмотр ответов на анкеты:\n\n🔍 Введите имя или часть имени для поиска пользователя:"
                     else:
@@ -2438,6 +2470,19 @@ class WebServer:
                                         keyboard=create_main_menu_keyboard()
                                     )
                                     del ADMIN_SEARCH_SESSIONS[user_id]
+                        
+                        elif mode == "edit_komu_vydan":
+                            # Ask for new komu_vydan value
+                            selected_user = await db.get_user(session["selected_user_id"])
+                            current_komu_vydan = selected_user.get("komu_vydan", "") if selected_user else ""
+                            session["step"] = "awaiting_komu_vydan"
+                            msg_template = TEXTS_DATA.get("edit_komu_vydan_prompt", "✏️ Текущее значение \"Кому выдан\" для пользователя {user_name}:\n\n{current_value}\n\nВведите новое значение:")
+                            await self.vk_api.send_message(
+                                user_id=user_id,
+                                message=msg_template.format(user_name=selected_name, current_value=current_komu_vydan),
+                                peer_id=peer_id,
+                                keyboard=create_main_menu_keyboard()
+                            )
                     return
                 
                 # Handle spins selection (1-10) for fortune wheel
@@ -2468,6 +2513,30 @@ class WebServer:
                         
                         del ADMIN_SEARCH_SESSIONS[user_id]
                         return
+                
+                # Handle awaiting komu_vydan text input
+                if session.get("mode") == "edit_komu_vydan" and session["step"] == "awaiting_komu_vydan" and text:
+                    target_user_id = session["selected_user_id"]
+                    
+                    # Update komu_vydan in database
+                    await db.update_user_field(target_user_id, "komu_vydan", text)
+                    
+                    target_user = await db.get_user(target_user_id)
+                    user_name = target_user.get("user_name", "Unknown") if target_user else "Unknown"
+                    
+                    # Determine which keyboard to show
+                    keyboard = create_manager_keyboard() if is_manager else create_admin_keyboard()
+                    
+                    msg_template = TEXTS_DATA.get("edit_komu_vydan_success", '✅ Поле "Кому выдан" обновлено для пользователя {user_name}:\n\n{new_value}')
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message=msg_template.format(user_name=user_name, new_value=text),
+                        peer_id=peer_id,
+                        keyboard=keyboard
+                    )
+                    
+                    del ADMIN_SEARCH_SESSIONS[user_id]
+                    return
                 
                 # Handle form selection for viewing answers
                 if session.get("mode") == "view_answers" and session["step"] == "select_form":
@@ -2902,16 +2971,16 @@ class WebServer:
                 
                 # Generate and send diploma
                 try:
-                    user_name_case = user_data.get("user_name_case", "") if user_data else ""
-                    if not user_name_case:
-                        user_name_case = user_data.get("user_name", "Участник") if user_data else "Участник"
+                    komu_vydan = user_data.get("komu_vydan", "") if user_data else ""
+                    if not komu_vydan:
+                        komu_vydan = user_data.get("user_name", "Участник") if user_data else "Участник"
                     
                     # Get current date
                     today = datetime.now()
                     date_str = today.strftime("%d.%m.%Y")
                     
                     # Generate diploma
-                    diploma_data = generate_diploma(course, user_name_case, date_str)
+                    diploma_data = generate_diploma(course, komu_vydan, date_str)
                     if diploma_data:
                         filename = f"diploma_course_{course}_{user_id}.png"
                         await self.vk_api.send_document(
@@ -3472,14 +3541,6 @@ class WebServer:
             keyboard=create_final_form_open_keyboard()
         )
         
-        # Send intro message
-        intro_text = TEXTS_DATA.get("final_form_intro", "После прохождения анкеты мы обязательно пришлём Ваш диплом об успешном окончании курса! 🎉")
-        await self.vk_api.send_message(
-            user_id=user_id,
-            message=intro_text,
-            peer_id=peer_id
-        )
-        
         # Get user data for name_case
         user_name = user_data.get("user_name", "") if user_data else ""
         user_name_case = user_data.get("user_name_case", "") if user_data else ""
@@ -3492,7 +3553,7 @@ class WebServer:
             "answers": {},
             "user_name": user_name,
             "user_name_case": user_name_case,
-            "ФИ_датпад": user_data.get("ФИ_датпад", "Иванову Ивану") if user_data else "Иванову Ивану"
+            "komu_vydan": user_data.get("komu_vydan", "Иванову Ивану") if user_data else "Иванову Ивану"
         }
         
         # Send first question
@@ -3520,8 +3581,8 @@ class WebServer:
             question_text = question_text.replace("{user_name}", session.get("user_name", ""))
         if "{user_name_case}" in question_text:
             question_text = question_text.replace("{user_name_case}", session.get("user_name_case", ""))
-        if "{ФИ_датпад}" in question_text:
-            question_text = question_text.replace("{ФИ_датпад}", session.get("ФИ_датпад", ""))
+        if "{komu_vydan}" in question_text:
+            question_text = question_text.replace("{komu_vydan}", session.get("komu_vydan", ""))
         
         # Send question text without prefix
         message = question_text
@@ -3591,8 +3652,8 @@ class WebServer:
                 session["user_name"] = answer
             elif update_field == "user_name_case":
                 session["user_name_case"] = answer
-            elif update_field == "ФИ_датпад":
-                session["ФИ_датпад"] = answer
+            elif update_field == "komu_vydan":
+                session["komu_vydan"] = answer
         
         # Get next question
         next_question = get_next_question_id(question_id, answer)
@@ -3669,7 +3730,7 @@ class WebServer:
             qid = q.get("id")
             qtext = q.get("question", "")
             # Remove variable placeholders for storage
-            qtext_clean = qtext.replace("{user_name}", "").replace("{user_name_case}", "").replace("{ФИ_датпад}", "").strip()
+            qtext_clean = qtext.replace("{user_name}", "").replace("{user_name_case}", "").replace("{komu_vydan}", "").strip()
             question_texts[qid] = qtext_clean
         
         # Format answers with question text (same format as initial form)
@@ -3758,16 +3819,16 @@ class WebServer:
         # Generate and send diploma
         try:
             user_data = await db.get_user(user_id)
-            user_name_case = user_data.get("user_name_case", "") if user_data else ""
-            if not user_name_case:
-                user_name_case = user_data.get("user_name", "Участник") if user_data else "Участник"
+            komu_vydan = user_data.get("komu_vydan", "") if user_data else ""
+            if not komu_vydan:
+                komu_vydan = user_data.get("user_name", "Участник") if user_data else "Участник"
             
             # Get current date
             today = datetime.now()
             date_str = today.strftime("%d.%m.%Y")
             
             # Generate diploma
-            diploma_data = generate_diploma(course, user_name_case, date_str)
+            diploma_data = generate_diploma(course, komu_vydan, date_str)
             if diploma_data:
                 filename = f"diploma_course_{course}_{user_id}.png"
                 await self.vk_api.send_document(
