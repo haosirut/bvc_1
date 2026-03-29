@@ -140,8 +140,21 @@ def load_json_file(filename: str) -> Dict:
         print(f"Error loading {filename}: {e}", flush=True)
         return {}
 
-# Load tests, texts and form
-TESTS_DATA = load_json_file("tests.json")
+# Load tests per course (tests/test_1.json, tests/test_2.json, ...)
+TESTS_ALL_DATA: Dict[int, Dict] = {}
+_tests_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests")
+for _ci in range(1, 5):
+    _tf = os.path.join(_tests_dir, f"test_{_ci}.json")
+    if os.path.isfile(_tf):
+        try:
+            with open(_tf, 'r', encoding='utf-8') as _f:
+                TESTS_ALL_DATA[_ci] = json.load(_f)
+            print(f"Loaded tests/test_{_ci}.json successfully", flush=True)
+        except Exception as _e:
+            print(f"Error loading tests/test_{_ci}.json: {_e}", flush=True)
+    else:
+        print(f"Warning: tests/test_{_ci}.json not found, course {_ci} tests disabled", flush=True)
+
 TEXTS_DATA = load_json_file("texts.json")
 FORM_DATA = load_json_file("form.json")
 FINAL_FORM_DATA = load_json_file("final_form_1.json")
@@ -1482,22 +1495,28 @@ def create_final_form_open_keyboard() -> Dict:
 # -----------------------------------------------------------------------------
 # Test Logic
 # -----------------------------------------------------------------------------
+def get_tests_data(course_index: int) -> Dict:
+    """Get TESTS_DATA for a specific course. Falls back to course 1 if not found."""
+    return TESTS_ALL_DATA.get(course_index, TESTS_ALL_DATA.get(1, {}))
+
 def shuffle_answers(answers: List[Dict]) -> List[Dict]:
     """Shuffle answers and return new list with button numbers."""
     shuffled = deepcopy(answers)
     random.shuffle(shuffled)
     return shuffled
 
-def get_random_variant() -> int:
-    """Get random variant number."""
-    variants = TESTS_DATA.get("variants", [])
+def get_random_variant(course_index: int = 1) -> int:
+    """Get random variant number for a specific course."""
+    td = get_tests_data(course_index)
+    variants = td.get("variants", [])
     if variants:
         return random.randint(0, len(variants) - 1)
     return 0
 
-def get_question(variant_idx: int, question_idx: int) -> Optional[Dict]:
-    """Get question from variant."""
-    variants = TESTS_DATA.get("variants", [])
+def get_question(course_index: int, variant_idx: int, question_idx: int) -> Optional[Dict]:
+    """Get question from variant for a specific course."""
+    td = get_tests_data(course_index)
+    variants = td.get("variants", [])
     if variant_idx < len(variants):
         questions = variants[variant_idx].get("questions", [])
         if question_idx < len(questions):
@@ -2001,7 +2020,8 @@ class WebServer:
             "user_men_ids": USER_MEN_IDS,
             "user_mar_ids": USER_MAR_IDS,
             "user_admin_id": USER_ADMIN_ID,
-            "tests_loaded": bool(TESTS_DATA),
+            "tests_loaded": bool(TESTS_ALL_DATA),
+            "tests_courses": list(TESTS_ALL_DATA.keys()),
             "texts_loaded": bool(TEXTS_DATA),
             "form_loaded": bool(FORM_DATA),
             "final_form_loaded": bool(FINAL_FORM_DATA),
@@ -3225,13 +3245,14 @@ class WebServer:
         )
         
         # Initialize session
-        variant_idx = get_random_variant()
+        course_index = self._get_course_index()
+        variant_idx = get_random_variant(course_index)
         USER_SESSIONS[user_id] = {
             "variant": variant_idx,
             "question": 0,
             "score": 0,
             "shuffled_answers": None,
-            "course_index": self._get_course_index()
+            "course_index": course_index
         }
         
         # Send first question
@@ -3244,10 +3265,11 @@ class WebServer:
             print(f"No session for user {user_id}", flush=True)
             return
         
+        course_index = session.get("course_index", 1)
         variant_idx = session["variant"]
         question_idx = session["question"]
         
-        question = get_question(variant_idx, question_idx)
+        question = get_question(course_index, variant_idx, question_idx)
         if not question:
             print(f"No question found: variant={variant_idx}, question={question_idx}", flush=True)
             return
@@ -3257,7 +3279,8 @@ class WebServer:
         session["shuffled_answers"] = shuffled
         
         # Get total questions
-        total = len(TESTS_DATA.get("variants", [{}])[variant_idx].get("questions", []))
+        td = get_tests_data(course_index)
+        total = len(td.get("variants", [{}])[variant_idx].get("questions", []))
         
         # Format and send question
         question_text = format_question_message(question, question_idx + 1, total)
@@ -3289,9 +3312,10 @@ class WebServer:
         selected_answer = shuffled[answer_num - 1]
         is_correct = selected_answer.get("is_correct", False)
         
+        course_index = session.get("course_index", 1)
         variant_idx = session["variant"]
         question_idx = session["question"]
-        question = get_question(variant_idx, question_idx)
+        question = get_question(course_index, variant_idx, question_idx)
         
         if is_correct:
             session["score"] += 1
@@ -3315,7 +3339,8 @@ class WebServer:
         session["question"] += 1
         
         # Check if test is complete
-        total = len(TESTS_DATA.get("variants", [{}])[variant_idx].get("questions", []))
+        td = get_tests_data(course_index)
+        total = len(td.get("variants", [{}])[variant_idx].get("questions", []))
         
         if session["question"] >= total:
             await self._finish_test(user_id, peer_id)
@@ -3329,8 +3354,10 @@ class WebServer:
             return
         
         score = session["score"]
-        total = len(TESTS_DATA.get("variants", [{}])[session["variant"]].get("questions", []))
-        passing_score = TESTS_DATA.get("test_info", {}).get("passing_score", 18)
+        course_index = session.get("course_index", 1)
+        td = get_tests_data(course_index)
+        total = len(td.get("variants", [{}])[session["variant"]].get("questions", []))
+        passing_score = td.get("test_info", {}).get("passing_score", 18)
         passed = score >= passing_score
         
         # Check if user is admin/manager/marketing
