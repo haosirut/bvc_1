@@ -3012,8 +3012,8 @@ class WebServer:
                 await self._start_test(user_id, peer_id)
                 return
             
-            # Handle answer buttons (1, 2, 3)
-            if text in ["1", "2", "3"]:
+            # Handle test answer buttons (1, 2, 3) - only if in test session
+            if text in ["1", "2", "3"] and user_id in USER_SESSIONS:
                 await self._handle_answer(user_id, peer_id, int(text))
                 return
             
@@ -3022,8 +3022,14 @@ class WebServer:
                 await self._handle_form_answer(user_id, peer_id, text)
                 return
             
-            # Ignore all other text
+            # Ignore all other text - send helpful message instead of silent ignore
             print(f"Ignoring text message from user {user_id}: {text}", flush=True)
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=TEXTS_DATA.get("menu_select_action", "Выберите действие:"),
+                peer_id=peer_id,
+                keyboard=create_main_menu_keyboard()
+            )
             
         except Exception as e:
             print(f"Message handling error: {e}", flush=True)
