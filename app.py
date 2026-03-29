@@ -3272,32 +3272,32 @@ class WebServer:
         is_manager = (user_id in USER_MEN_IDS)
         is_marketing = (user_id in USER_MAR_IDS)
         
-        # Get user name for admin notification
+        # Get user name for notification
         user_name = f"ID{user_id}"
+        user_display = f"[id{user_id}|ID{user_id}]"
         try:
             user_info = await self.vk_api.get_user_info(user_id)
             if "response" in user_info and user_info["response"]:
                 first_name = user_info["response"][0].get("first_name", "")
                 last_name = user_info["response"][0].get("last_name", "")
-                user_name = f"{first_name} {last_name} (ID: {user_id})"
+                user_name = f"{first_name} {last_name}"
+                user_display = f"[id{user_id}|{user_name}]"
         except Exception as e:
             print(f"Error getting user info: {e}", flush=True)
         
-        # Send notification to all admins
+        # Send notification to all managers
         if USER_MEN_IDS:
             status = "СДАЛ" if passed else "НЕ СДАЛ"
-            # Create clickable link to user profile
-            user_link = f"[id{user_id}|{user_name}]"
-            admin_message = f"Пользователь {user_link} {status} тест!\nРезультат: {score}/{total}"
-            for admin_id in USER_MEN_IDS:
+            admin_message = f"Пользователь {user_display} {status} тест!\nРезультат: {score}/{total}"
+            for men_id in USER_MEN_IDS:
                 try:
                     await self.vk_api.send_message(
-                        user_id=admin_id,
+                        user_id=men_id,
                         message=admin_message
                     )
-                    print(f"Admin notification sent to {admin_id}", flush=True)
+                    print(f"Manager notification sent to {men_id}", flush=True)
                 except Exception as e:
-                    print(f"Failed to send admin notification to {admin_id}: {e}", flush=True)
+                    print(f"Failed to send notification to {men_id}: {e}", flush=True)
         
         # Get user form status for correct keyboard
         user_data = await db.get_user(user_id)
