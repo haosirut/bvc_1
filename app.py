@@ -363,7 +363,7 @@ class Database:
         allowed_fields = [
             'form_first', 'form_first_answer', 
             'test_book_1', 'test_book_2', 'test_book_3', 'test_book_4', 
-            'user_name', 'user_name_case', '"komu_vydan"',
+            'user_name', 'user_name_case', 'komu_vydan',
             'practice_1', 'practice_2', 'practice_3', 'practice_4',
             'access_survey_1', 'access_survey_2', 'access_survey_3', 'access_survey_4',
             'form_end_1', 'form_end_2', 'form_end_3', 'form_end_4',
@@ -376,7 +376,7 @@ class Database:
         try:
             async with self.pool.acquire() as conn:
                 await conn.execute(
-                    f"UPDATE users SET {field} = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2",
+                    f'UPDATE users SET "{field}" = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2',
                     value, user_id
                 )
                 return True
