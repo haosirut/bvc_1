@@ -2066,7 +2066,8 @@ class WebServer:
                     return
             
             # Handle "Start" button
-            if text.lower() in ["начать", "start", "/start"]:
+            # Skip if user is in active session - let session handlers process the input
+            if text.lower() in ["начать", "start", "/start"] and user_id not in FINAL_FORM_SESSIONS and user_id not in USER_SESSIONS and user_id not in FORM_SESSIONS:
                 # Clear any existing sessions
                 if user_id in USER_SESSIONS:
                     del USER_SESSIONS[user_id]
@@ -2684,7 +2685,7 @@ class WebServer:
                 await self._spin_fortune_wheel(user_id, peer_id)
                 return
             
-            # Handle final form buttons (Да/Нет/Не знаю/Не против/Против/Верно/Исправить)
+            # Handle final form sessions (buttons, rating, open questions)
             if user_id in FINAL_FORM_SESSIONS:
                 session = FINAL_FORM_SESSIONS[user_id]
                 question = get_final_form_question(session["current_question"])
@@ -2692,11 +2693,20 @@ class WebServer:
                 if question:
                     question_type = question.get("type", "open")
                     
-                    # Handle button-type questions
+                    # Handle button-type questions - only accept matching buttons
                     if question_type == "buttons":
                         buttons = question.get("buttons", [])
                         if text in buttons or text in ["Верно", "Исправить ФИ", "Исправить ФИ и падеж"]:
                             await self._handle_final_form_button(user_id, peer_id, text)
+                            return
+                        else:
+                            # User typed text that doesn't match any button - ignore with message
+                            print(f"User {user_id} typed '{text}' during button question (buttons: {buttons}), ignoring", flush=True)
+                            await self.vk_api.send_message(
+                                user_id=user_id,
+                                message=TEXTS_DATA.get("use_buttons_message", "Пожалуйста, используйте кнопки для ответа."),
+                                peer_id=peer_id
+                            )
                             return
                     
                     # Handle rating questions (1-10)
@@ -2708,8 +2718,27 @@ class WebServer:
                             if min_val <= rating <= max_val:
                                 await self._handle_final_form_button(user_id, peer_id, text)
                                 return
+                            else:
+                                # Rating out of range
+                                print(f"User {user_id} typed rating {rating} out of range [{min_val}-{max_val}], ignoring", flush=True)
+                                msg_template = TEXTS_DATA.get("rating_range_message", "Пожалуйста, введите число от {min} до {max}.")
+                                await self.vk_api.send_message(
+                                    user_id=user_id,
+                                    message=msg_template.format(min=min_val, max=max_val),
+                                    peer_id=peer_id
+                                )
+                                return
                         except ValueError:
-                            pass  # Not a number, fall through to open answer handling
+                            # Not a number during rating question - ignore
+                            print(f"User {user_id} typed '{text}' during rating question, ignoring", flush=True)
+                            await self.vk_api.send_message(
+                                user_id=user_id,
+                                message=TEXTS_DATA.get("rating_number_message", "Пожалуйста, введите число от {min} до {max}.").format(
+                                    min=question.get("min", 1), max=question.get("max", 10)
+                                ),
+                                peer_id=peer_id
+                            )
+                            return
                     
                     # Handle open questions (text input)
                     if question_type == "open":
