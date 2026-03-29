@@ -37,13 +37,31 @@ DB_USER = os.getenv("DB_USER", "")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 # Parse manager IDs (USER_MEN) from comma-separated string
-USER_MEN_IDS = [int(id.strip()) for id in USER_MEN_STR.split(",") if id.strip()]
+USER_MEN_IDS = []
+for _id in USER_MEN_STR.split(","):
+    _id = _id.strip()
+    if _id:
+        try:
+            USER_MEN_IDS.append(int(_id))
+        except ValueError:
+            print(f"WARNING: Invalid manager ID '{_id}' in USER_MEN, skipping", flush=True)
 
 # Parse marketing IDs (USER_MAR) from comma-separated string
-USER_MAR_IDS = [int(id.strip()) for id in USER_MAR_STR.split(",") if id.strip()]
+USER_MAR_IDS = []
+for _id in USER_MAR_STR.split(","):
+    _id = _id.strip()
+    if _id:
+        try:
+            USER_MAR_IDS.append(int(_id))
+        except ValueError:
+            print(f"WARNING: Invalid marketing ID '{_id}' in USER_MAR, skipping", flush=True)
 
 # Parse super admin ID
-USER_ADMIN_ID = int(USER_ADMIN) if USER_ADMIN else 0
+try:
+    USER_ADMIN_ID = int(USER_ADMIN) if USER_ADMIN else 0
+except ValueError:
+    print(f"WARNING: Invalid USER_ADMIN ID '{USER_ADMIN}', defaulting to 0", flush=True)
+    USER_ADMIN_ID = 0
 
 # Setup logging
 logging.basicConfig(
@@ -3249,8 +3267,10 @@ class WebServer:
         passing_score = TESTS_DATA.get("test_info", {}).get("passing_score", 18)
         passed = score >= passing_score
         
-        # Check if user is admin
+        # Check if user is admin/manager/marketing
         is_admin = (user_id == USER_ADMIN_ID)
+        is_manager = (user_id in USER_MEN_IDS)
+        is_marketing = (user_id in USER_MAR_IDS)
         
         # Get user name for admin notification
         user_name = f"ID{user_id}"
@@ -3420,8 +3440,10 @@ class WebServer:
         
         print(f"Form completed for user {user_id}, name: {user_name}", flush=True)
         
-        # Check if user is admin
+        # Check if user is admin/manager/marketing
         is_admin = (user_id == USER_ADMIN_ID)
+        is_manager = (user_id in USER_MEN_IDS)
+        is_marketing = (user_id in USER_MAR_IDS)
         
         # Get user data for keyboard (form_first=2, test_book_1=1 at this point)
         user_data = await db.get_user(user_id)
@@ -3434,8 +3456,8 @@ class WebServer:
         
         keyboard = create_dynamic_menu_keyboard(
             is_admin=is_admin,
-                    is_manager=is_manager,
-                    is_marketing=is_marketing,
+            is_manager=is_manager,
+            is_marketing=is_marketing,
             form_first=form_first_status,
             test_book_1=test_book_1_status,
             practice_1=practice_1_status,
@@ -3462,21 +3484,21 @@ class WebServer:
             keyboard=keyboard
         )
         
-        # Notify marketers (USER_MEN_IDS) about form completion with full answers
-        if USER_MEN_IDS:
+        # Notify marketing (USER_MAR_IDS) about form completion with full answers
+        if USER_MAR_IDS:
             # Create clickable link to user profile
             user_link = f"[id{user_id}|{user_name}]"
             admin_message = f"📋 Пользователь {user_link} заполнил приветственную анкету!\n\n{form_answer}"
             
-            for admin_id in USER_MEN_IDS:
+            for mar_id in USER_MAR_IDS:
                 try:
                     await self.vk_api.send_message(
-                        user_id=admin_id,
+                        user_id=mar_id,
                         message=admin_message
                     )
-                    print(f"Marketer notification sent about form completion by user {user_id} to {admin_id}", flush=True)
+                    print(f"Marketing notification sent about form completion by user {user_id} to {mar_id}", flush=True)
                 except Exception as e:
-                    print(f"Failed to send notification to {admin_id}: {e}", flush=True)
+                    print(f"Failed to send notification to {mar_id}: {e}", flush=True)
         
         # Clear form session
         del FORM_SESSIONS[user_id]
@@ -3846,21 +3868,21 @@ class WebServer:
         except Exception as e:
             logger.error(f"Failed to send diploma to user {user_id}: {e}")
         
-        # Notify marketers (USER_MEN_IDS)
-        if USER_MEN_IDS:
+        # Notify marketing (USER_MAR_IDS) about final form completion
+        if USER_MAR_IDS:
             user_data = await db.get_user(user_id)
             user_name = user_data.get("user_name", f"ID{user_id}") if user_data else f"ID{user_id}"
             user_link = f"[id{user_id}|{user_name}]"
             msg_template = TEXTS_DATA.get("final_form_admin_notification", "🎓 Пользователь {user_link} завершил Курс {course}!\n\n{form_answers}")
-            admin_message = msg_template.format(user_link=user_link, course=course, form_answers=answers_text)
-            for admin_id in USER_MEN_IDS:
+            mar_message = msg_template.format(user_link=user_link, course=course, form_answers=answers_text)
+            for mar_id in USER_MAR_IDS:
                 try:
                     await self.vk_api.send_message(
-                        user_id=admin_id,
-                        message=admin_message
+                        user_id=mar_id,
+                        message=mar_message
                     )
                 except Exception as e:
-                    print(f"Failed to notify marketer {admin_id}: {e}", flush=True)
+                    print(f"Failed to notify marketing {mar_id}: {e}", flush=True)
         
         # Clear session
         del FINAL_FORM_SESSIONS[user_id]
@@ -3999,6 +4021,21 @@ class WebServer:
             peer_id=peer_id,
             keyboard=keyboard
         )
+        
+        # Notify managers about digital (non-physical) prize
+        if not is_physical_prize(prize) and USER_MEN_IDS:
+            user_data = await db.get_user(user_id)
+            user_name = user_data.get("user_name", f"ID{user_id}") if user_data else f"ID{user_id}"
+            user_link = f"[id{user_id}|{user_name}]"
+            prize_notification = f"🎁 Пользователь {user_link} выиграл цифровой приз: {prize}\n\nСвяжитесь с пользователем для выдачи приза."
+            for men_id in USER_MEN_IDS:
+                try:
+                    await self.vk_api.send_message(
+                        user_id=men_id,
+                        message=prize_notification
+                    )
+                except Exception as e:
+                    print(f"Failed to notify manager {men_id} about prize: {e}", flush=True)
 
 
 # -----------------------------------------------------------------------------
