@@ -242,9 +242,9 @@
           "question_number": 6,
           "question": "Как можно заработать очко в пляжном волейболе?",
           "answers": [
-            {"id": 1, "text": "Добить мяч до песка на стороне соперника", "is_correct": true},
-            {"id": 2, "text": "Оба ответа верны", "is_correct": false},
-            {"id": 3, "text": "Заставить соперника ошибиться", "is_correct": false}
+            {"id": 1, "text": "Добить мяч до песка на стороне соперника", "is_correct": false},
+            {"id": 2, "text": "Заставить соперника ошибиться", "is_correct": false},
+            {"id": 3, "text": "Оба ответа верны", "is_correct": true}
           ]
         },
         {
