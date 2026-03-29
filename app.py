@@ -3498,18 +3498,19 @@ class WebServer:
         await db.update_user_field(user_id, "user_name", user_name)
         await db.update_user_field(user_id, "form_first_answer", form_answer)
         await db.update_user_field(user_id, "form_first", 2)  # 2 = completed
-        # Unlock test access for the current group's course
-        course_index = self._get_course_index()
-        await db.update_user_field(user_id, f"test_book_{course_index}", 1)  # 1 = accessible (show test button)
+        # Unlock test access for ALL courses (welcome survey is shared)
+        for _ci in range(1, 5):
+            await db.update_user_field(user_id, f"test_book_{_ci}", 1)
         
-        print(f"Form completed for user {user_id}, name: {user_name} (course {course_index})", flush=True)
+        print(f"Form completed for user {user_id}, name: {user_name} (all courses unlocked)", flush=True)
         
         # Check if user is admin/manager/marketing
         is_admin = (user_id == USER_ADMIN_ID)
         is_manager = (user_id in USER_MEN_IDS)
         is_marketing = (user_id in USER_MAR_IDS)
         
-        # Get user data for keyboard (form_first=2, test_book_{N}=1 at this point)
+        # Get user data for keyboard
+        course_index = self._get_course_index()
         user_data = await db.get_user(user_id)
         form_first_status = user_data.get("form_first", 0) if user_data else 0
         cf = self._get_user_course_fields(user_data, course_index)
