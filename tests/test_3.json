@@ -1,0 +1,23 @@
+{
+  "test_info": {
+    "title": "Тестирование 3 курс",
+    "passing_score": 18,
+    "total_questions": 1
+  },
+  "variants": [
+    {
+      "variant_number": 1,
+      "questions": [
+        {
+          "question_number": 1,
+          "question": "Тестирование для данного курса пока не загружено. Свяжитесь с администратором.",
+          "answers": [
+            {"id": 1, "text": "Понятно", "is_correct": true},
+            {"id": 2, "text": "Ок", "is_correct": false},
+            {"id": 3, "text": "Хорошо", "is_correct": false}
+          ]
+        }
+      ]
+    }
+  ]
+}
