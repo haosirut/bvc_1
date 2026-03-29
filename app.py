@@ -44,6 +44,7 @@ while True:
     _token = os.getenv(f"TOKEN_{_group_index}", "")
     _confirm = os.getenv(f"CONFIRMATION_TOKEN_{_group_index}", "")
     if not _group_id_str or not _token or not _confirm:
+        print(f"DEBUG: GROUP_{_group_index}='{_group_id_str}' TOKEN_{_group_index}={'SET' if _token else 'EMPTY'} CONFIRMATION_TOKEN_{_group_index}='{_confirm}' -> BREAK", flush=True)
         break
     try:
         _gid = int(_group_id_str)
