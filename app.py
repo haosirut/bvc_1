@@ -113,7 +113,7 @@ ADMIN_SEARCH_SESSIONS: Dict[int, Dict] = {}
 
 # -----------------------------------------------------------------------------
 # Final Form Sessions (in-memory)
-# Format: {user_id: {"course": int, "step": str, "answers": Dict, "current_question": int/str, "need_case_update": bool}}
+# Format: {user_id: {"course": int, "step": str, "answers": Dict, "current_question": int/str}}
 # Steps: "question", "check_data", "update_name", "update_case", "finished"
 # -----------------------------------------------------------------------------
 FINAL_FORM_SESSIONS: Dict[int, Dict] = {}
@@ -158,7 +158,7 @@ class Database:
                         user_id BIGINT PRIMARY KEY,
                         user_name TEXT,
                         user_name_case TEXT DEFAULT '',
-                        "ФИ_датпад" TEXT DEFAULT '',
+                        "ФИ_датпад" TEXT DEFAULT 'Иванову Ивану',
                         form_first INTEGER DEFAULT 0,
                         form_first_answer TEXT DEFAULT '',
                         test_book_1 INTEGER DEFAULT 0,
@@ -192,7 +192,7 @@ class Database:
             async with self.pool.acquire() as conn:
                 new_columns = [
                     ("user_name_case", "TEXT DEFAULT ''"),
-                    ("\"ФИ_датпад\"", "TEXT DEFAULT ''"),
+                    ("\"ФИ_датпад\"", "TEXT DEFAULT 'Иванову Ивану'"),
                     ("form_first", "INTEGER DEFAULT 0"),
                     ("form_first_answer", "TEXT DEFAULT ''"),
                     ("test_book_1", "INTEGER DEFAULT 0"),
@@ -341,12 +341,12 @@ class Database:
         try:
             async with self.pool.acquire() as conn:
                 await conn.execute('''
-                    INSERT INTO users (user_id, user_name, form_first, form_first_answer, 
+                    INSERT INTO users (user_id, user_name, "ФИ_датпад", form_first, form_first_answer, 
                                        test_book_1, test_book_2, test_book_3, test_book_4,
                                        practice_1, practice_2, practice_3, practice_4,
                                        access_survey_1, access_survey_2, access_survey_3, access_survey_4,
                                        diploma_1, diploma_2, diploma_3, diploma_4)
-                    VALUES ($1, $2, 1, '', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+                    VALUES ($1, $2, 'Иванову Ивану', 1, '', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
                     ON CONFLICT (user_id) DO UPDATE SET user_name = $2, updated_at = CURRENT_TIMESTAMP
                 ''', user_id, user_name)
                 print(f"User {user_id} created/updated in database", flush=True)
@@ -1330,7 +1330,7 @@ def create_rating_keyboard(min_val: int = 1, max_val: int = 10) -> Dict:
 
 
 def create_check_data_keyboard() -> Dict:
-    """Keyboard for checking user data in final form."""
+    """Keyboard for checking user data in final form (question 13)."""
     return {
         "one_time": False,
         "inline": False,
@@ -1343,11 +1343,7 @@ def create_check_data_keyboard() -> Dict:
             ],
             [
                 {
-                    "action": {"type": "text", "label": "Исправить ФИ"},
-                    "color": "primary"
-                },
-                {
-                    "action": {"type": "text", "label": "Исправить ФИ и падеж"},
+                    "action": {"type": "text", "label": "Изменить ФИ и Кому выдан"},
                     "color": "primary"
                 }
             ],
@@ -2696,7 +2692,7 @@ class WebServer:
                     # Handle button-type questions - only accept matching buttons
                     if question_type == "buttons":
                         buttons = question.get("buttons", [])
-                        if text in buttons or text in ["Верно", "Исправить ФИ", "Исправить ФИ и падеж"]:
+                        if text in buttons or text in ["Верно", "Изменить ФИ и Кому выдан"]:
                             await self._handle_final_form_button(user_id, peer_id, text)
                             return
                         else:
@@ -3496,8 +3492,7 @@ class WebServer:
             "answers": {},
             "user_name": user_name,
             "user_name_case": user_name_case,
-            "ФИ_датпад": user_data.get("ФИ_датпад", "") if user_data else "",
-            "need_case_update": False
+            "ФИ_датпад": user_data.get("ФИ_датпад", "Иванову Ивану") if user_data else "Иванову Ивану"
         }
         
         # Send first question
@@ -3599,17 +3594,10 @@ class WebServer:
             elif update_field == "ФИ_датпад":
                 session["ФИ_датпад"] = answer
         
-        # Handle special case: check_need_case_update
+        # Get next question
         next_question = get_next_question_id(question_id, answer)
         
-        if next_question == "check_need_case_update":
-            # This comes after question 14, check if we need case update
-            if session.get("need_case_update"):
-                session["current_question"] = 15
-            else:
-                await self._finish_final_form(user_id, peer_id)
-                return
-        elif next_question == "finish" or next_question is None:
+        if next_question == "finish" or next_question is None:
             await self._finish_final_form(user_id, peer_id)
             return
         else:
@@ -3654,14 +3642,8 @@ class WebServer:
             if button == "Верно":
                 await self._finish_final_form(user_id, peer_id)
                 return
-            elif button == "Исправить ФИ":
+            elif button == "Изменить ФИ и Кому выдан":
                 session["current_question"] = 14
-                session["need_case_update"] = False
-                await self._send_final_form_question(user_id, peer_id)
-                return
-            elif button == "Исправить ФИ и падеж":
-                session["current_question"] = 14
-                session["need_case_update"] = True
                 await self._send_final_form_question(user_id, peer_id)
                 return
         
