@@ -23,8 +23,6 @@ sys.stderr.reconfigure(line_buffering=True)
 # -----------------------------------------------------------------------------
 # Environment Variables
 # -----------------------------------------------------------------------------
-TOKEN = os.getenv("TOKEN", "")
-CONFIRMATION_TOKEN = os.getenv("CONFIRMATION_TOKEN", "")
 USER_MEN_STR = os.getenv("USER_MEN", "")  # Manager IDs - can open access, add fortune wheel spins
 USER_MAR_STR = os.getenv("USER_MAR", "")  # Marketing IDs - can view form answers
 USER_ADMIN = os.getenv("USER_ADMIN", "")  # Super admin ID for admin panel and database export
@@ -35,6 +33,43 @@ DB_HOST = os.getenv("DB_HOST", "")
 DB_NAME = os.getenv("DB_NAME", "")
 DB_USER = os.getenv("DB_USER", "")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+
+# Multi-group configuration
+# Parse GROUP_X, TOKEN_X, CONFIRMATION_TOKEN_X from environment (X = 1, 2, 3, ...)
+# Format: GROUP_CONFIGS = {group_id: {"token": "...", "confirmation_token": "..."}}
+GROUP_CONFIGS: Dict[int, Dict[str, str]] = {}
+_group_index = 1
+while True:
+    _group_id_str = os.getenv(f"GROUP_{_group_index}", "")
+    _token = os.getenv(f"TOKEN_{_group_index}", "")
+    _confirm = os.getenv(f"CONFIRMATION_TOKEN_{_group_index}", "")
+    if not _group_id_str or not _token or not _confirm:
+        break
+    try:
+        _gid = int(_group_id_str)
+        GROUP_CONFIGS[_gid] = {"token": _token, "confirmation_token": _confirm}
+        print(f"Group {_gid} configured (TOKEN_{_group_index}, CONFIRMATION_TOKEN_{_group_index})", flush=True)
+    except ValueError:
+        print(f"WARNING: Invalid GROUP_{_group_index} value '{_group_id_str}', skipping", flush=True)
+    _group_index += 1
+
+# For backward compatibility: if GROUP_1 not set, try old single-group env vars
+if not GROUP_CONFIGS:
+    _old_token = os.getenv("TOKEN", "")
+    _old_confirm = os.getenv("CONFIRMATION_TOKEN", "")
+    _old_group = os.getenv("GROUP_1", "")
+    if _old_token and _old_confirm and _old_group:
+        try:
+            _gid = int(_old_group)
+            GROUP_CONFIGS[_gid] = {"token": _old_token, "confirmation_token": _old_confirm}
+            print(f"Group {_gid} configured (legacy TOKEN/CONFIRMATION_TOKEN)", flush=True)
+        except ValueError:
+            pass
+
+# First group as default
+DEFAULT_GROUP_ID = next(iter(GROUP_CONFIGS), 0)
+DEFAULT_TOKEN = GROUP_CONFIGS[DEFAULT_GROUP_ID]["token"] if DEFAULT_GROUP_ID else ""
+DEFAULT_CONFIRMATION_TOKEN = GROUP_CONFIGS[DEFAULT_GROUP_ID]["confirmation_token"] if DEFAULT_GROUP_ID else ""
 
 # Parse manager IDs (USER_MEN) from comma-separated string
 USER_MEN_IDS = []
@@ -74,8 +109,7 @@ logger = logging.getLogger("vk_bot")
 # Print startup info
 print("=" * 50, flush=True)
 print("VK BOT STARTING", flush=True)
-print(f"TOKEN: {'SET' if TOKEN else 'NOT SET'}", flush=True)
-print(f"CONFIRMATION_TOKEN: {'SET' if CONFIRMATION_TOKEN else 'NOT SET'}", flush=True)
+print(f"GROUPS CONFIGURED: {len(GROUP_CONFIGS)} ({list(GROUP_CONFIGS.keys())})", flush=True)
 print(f"USER_MEN_IDS (Managers): {USER_MEN_IDS}", flush=True)
 print(f"USER_MAR_IDS (Marketing): {USER_MAR_IDS}", flush=True)
 print(f"USER_ADMIN_ID: {USER_ADMIN_ID}", flush=True)
@@ -1916,9 +1950,14 @@ def parse_users_xlsx(file_data: bytes) -> List[Dict]:
 class WebServer:
     def __init__(self):
         self.app = web.Application()
-        self.vk_api = VKAPI(TOKEN) if TOKEN else None
+        # Create VKAPI instance per group
+        self.vk_apis: Dict[int, VKAPI] = {}
+        for gid, cfg in GROUP_CONFIGS.items():
+            self.vk_apis[gid] = VKAPI(cfg["token"])
+        # Default vk_api for backward compatibility
+        self.vk_api = self.vk_apis.get(DEFAULT_GROUP_ID) if DEFAULT_GROUP_ID else None
         self._setup_routes()
-        print("WebServer initialized", flush=True)
+        print(f"WebServer initialized with {len(self.vk_apis)} group(s)", flush=True)
 
     def _setup_routes(self) -> None:
         self.app.router.add_post("/", self.vk_webhook)
@@ -1931,8 +1970,7 @@ class WebServer:
         print("Health check requested", flush=True)
         return web.json_response({
             "status": "ok",
-            "token_configured": bool(TOKEN),
-            "confirmation_token_configured": bool(CONFIRMATION_TOKEN),
+            "groups_configured": list(GROUP_CONFIGS.keys()),
             "user_men_ids": USER_MEN_IDS,
             "user_mar_ids": USER_MAR_IDS,
             "user_admin_id": USER_ADMIN_ID,
@@ -1959,12 +1997,23 @@ class WebServer:
             
             print(f"Event: {event_type}, group: {group_id}", flush=True)
             
+            # Check if group is configured
+            if group_id not in GROUP_CONFIGS:
+                print(f"WARNING: Unknown group_id {group_id}, configured groups: {list(GROUP_CONFIGS.keys())}", flush=True)
+                return web.Response(text="ok")
+            
             if event_type == "confirmation":
-                print(f"CONFIRMATION REQUEST - returning: {CONFIRMATION_TOKEN}", flush=True)
-                return web.Response(text=CONFIRMATION_TOKEN)
+                confirm_token = GROUP_CONFIGS[group_id]["confirmation_token"]
+                print(f"CONFIRMATION REQUEST for group {group_id} - returning: {confirm_token}", flush=True)
+                return web.Response(text=confirm_token)
             
             if event_type == "message_new":
-                print("Handling message_new", flush=True)
+                # Switch to the correct VKAPI for this group
+                self.vk_api = self.vk_apis.get(group_id)
+                if not self.vk_api:
+                    print(f"ERROR: No VKAPI for group {group_id}", flush=True)
+                    return web.Response(text="ok")
+                print(f"Handling message_new for group {group_id}", flush=True)
                 await self._handle_message_new(data)
                 return web.Response(text="ok")
             
