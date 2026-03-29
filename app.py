@@ -1496,8 +1496,11 @@ def create_final_form_open_keyboard() -> Dict:
 # Test Logic
 # -----------------------------------------------------------------------------
 def get_tests_data(course_index: int) -> Dict:
-    """Get TESTS_DATA for a specific course. Falls back to course 1 if not found."""
-    return TESTS_ALL_DATA.get(course_index, TESTS_ALL_DATA.get(1, {}))
+    """Get TESTS_DATA for a specific course. Returns empty dict if not found."""
+    if course_index in TESTS_ALL_DATA:
+        return TESTS_ALL_DATA[course_index]
+    print(f"WARNING: No tests loaded for course {course_index}, available: {list(TESTS_ALL_DATA.keys())}", flush=True)
+    return {}
 
 def shuffle_answers(answers: List[Dict]) -> List[Dict]:
     """Shuffle answers and return new list with button numbers."""
@@ -3236,6 +3239,18 @@ class WebServer:
 
     async def _start_test(self, user_id: int, peer_id: int) -> None:
         """Start new test for user."""
+        course_index = self._get_course_index()
+        td = get_tests_data(course_index)
+        if not td or not td.get("variants"):
+            print(f"ERROR: No test data for course {course_index}", flush=True)
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message="❌ Тесты для данного курса пока не загружены. Свяжитесь с администратором.",
+                peer_id=peer_id,
+                keyboard=create_main_menu_keyboard()
+            )
+            return
+        
         # Send intro text
         intro_text = TEXTS_DATA.get("test_intro", "Начинаем тестирование!")
         await self.vk_api.send_message(
@@ -3245,7 +3260,6 @@ class WebServer:
         )
         
         # Initialize session
-        course_index = self._get_course_index()
         variant_idx = get_random_variant(course_index)
         USER_SESSIONS[user_id] = {
             "variant": variant_idx,
