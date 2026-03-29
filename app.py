@@ -3251,8 +3251,9 @@ class WebServer:
             )
             return
         
-        # Send intro text
+        # Send intro text with course number
         intro_text = TEXTS_DATA.get("test_intro", "Начинаем тестирование!")
+        intro_text = intro_text.replace("1-го", f"{course_index}-го")
         await self.vk_api.send_message(
             user_id=user_id,
             message=intro_text,
