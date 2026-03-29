@@ -38,18 +38,21 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 # Parse GROUP_X, TOKEN_X, CONFIRMATION_TOKEN_X from environment (X = 1, 2, 3, ...)
 # Format: GROUP_CONFIGS = {group_id: {"token": "...", "confirmation_token": "..."}}
 GROUP_CONFIGS: Dict[int, Dict[str, str]] = {}
+GROUP_COURSE_MAP: Dict[int, int] = {}  # group_id -> course_index (1-based)
+GROUP_INDEX_MAP: Dict[int, int] = {}  # group_id -> env index (1-based)
 _group_index = 1
 while True:
     _group_id_str = os.getenv(f"GROUP_{_group_index}", "")
     _token = os.getenv(f"TOKEN_{_group_index}", "")
     _confirm = os.getenv(f"CONFIRMATION_TOKEN_{_group_index}", "")
     if not _group_id_str or not _token or not _confirm:
-        print(f"DEBUG: GROUP_{_group_index}='{_group_id_str}' TOKEN_{_group_index}={'SET' if _token else 'EMPTY'} CONFIRMATION_TOKEN_{_group_index}='{_confirm}' -> BREAK", flush=True)
         break
     try:
         _gid = int(_group_id_str)
         GROUP_CONFIGS[_gid] = {"token": _token, "confirmation_token": _confirm}
-        print(f"Group {_gid} configured (TOKEN_{_group_index}, CONFIRMATION_TOKEN_{_group_index})", flush=True)
+        GROUP_COURSE_MAP[_gid] = _group_index  # group_index IS the course number
+        GROUP_INDEX_MAP[_gid] = _group_index
+        print(f"Group {_gid} configured (TOKEN_{_group_index}, CONFIRMATION_TOKEN_{_group_index}) -> Course {_group_index}", flush=True)
     except ValueError:
         print(f"WARNING: Invalid GROUP_{_group_index} value '{_group_id_str}', skipping", flush=True)
     _group_index += 1
@@ -823,22 +826,24 @@ def create_dynamic_menu_keyboard(
     is_manager: bool = False,
     is_marketing: bool = False,
     form_first: int = 0,
-    test_book_1: int = 0,
-    practice_1: int = 0,
-    access_survey_1: int = 0,
-    diploma_1: int = 0,
-    fortune_wheel: int = 0
+    test_book: int = 0,
+    practice: int = 0,
+    access_survey: int = 0,
+    diploma: int = 0,
+    fortune_wheel: int = 0,
+    course_index: int = 1
 ) -> Dict:
     """
     Dynamic menu keyboard based on user state.
     
     Button-antagonists (only ONE can be shown at a time, value=1):
     1. Приветственная анкета (form_first=1)
-    2. Тестирование (test_book_1=1)
-    3. Сдал(а) практику (practice_1=1)
-    4. Финальная анкета (access_survey_1=1)
-    5. Скачать диплом (diploma_1=1)
+    2. Тестирование (test_book_{N}=1)
+    3. Сдал(а) практику (practice_{N}=1)
+    4. Финальная анкета (access_survey_{N}=1)
+    5. Скачать диплом (diploma_{N}=1)
     
+    N is determined by course_index (which VK group the user is in).
     Fortune wheel is separate (shown if fortune_wheel > 0)
     Special panels: Admin, Manager, Marketing
     """
@@ -860,22 +865,22 @@ def create_dynamic_menu_keyboard(
             "action": {"type": "text", "label": "Приветственная анкета"},
             "color": "positive"
         }
-    elif test_book_1 == 1:
+    elif test_book == 1:
         action_button = {
             "action": {"type": "text", "label": "Тестирование"},
             "color": "positive"
         }
-    elif practice_1 == 1:
+    elif practice == 1:
         action_button = {
             "action": {"type": "text", "label": "Сдал(а) практику"},
             "color": "positive"
         }
-    elif access_survey_1 == 1:
+    elif access_survey == 1:
         action_button = {
             "action": {"type": "text", "label": "Финальная анкета"},
             "color": "positive"
         }
-    elif diploma_1 == 1:
+    elif diploma == 1:
         action_button = {
             "action": {"type": "text", "label": "Скачать диплом"},
             "color": "positive"
@@ -1957,6 +1962,9 @@ class WebServer:
             self.vk_apis[gid] = VKAPI(cfg["token"])
         # Default vk_api for backward compatibility
         self.vk_api = self.vk_apis.get(DEFAULT_GROUP_ID) if DEFAULT_GROUP_ID else None
+        # Track current group for course routing
+        self.current_group_id: int = DEFAULT_GROUP_ID
+        self.current_course_index: int = GROUP_COURSE_MAP.get(DEFAULT_GROUP_ID, 1) if DEFAULT_GROUP_ID else 1
         self._setup_routes()
         print(f"WebServer initialized with {len(self.vk_apis)} group(s)", flush=True)
 
@@ -1966,6 +1974,24 @@ class WebServer:
         self.app.router.add_get("/", self.health)
         self.app.router.add_get("/health", self.health)
         print("Routes setup complete", flush=True)
+
+    def _get_course_index(self) -> int:
+        """Get the course index for the current group."""
+        return GROUP_COURSE_MAP.get(self.current_group_id, 1)
+
+    def _get_user_course_fields(self, user_data: Optional[Dict], course_index: int) -> Dict[str, int]:
+        """Extract course-specific fields from user data.
+        
+        Returns dict with keys: test_book, practice, access_survey, diploma
+        """
+        if not user_data:
+            return {"test_book": 0, "practice": 0, "access_survey": 0, "diploma": 0}
+        return {
+            "test_book": user_data.get(f"test_book_{course_index}", 0),
+            "practice": user_data.get(f"practice_{course_index}", 0),
+            "access_survey": user_data.get(f"access_survey_{course_index}", 0),
+            "diploma": user_data.get(f"diploma_{course_index}", 0),
+        }
 
     async def health(self, request: web.Request) -> web.Response:
         print("Health check requested", flush=True)
@@ -2014,7 +2040,10 @@ class WebServer:
                 if not self.vk_api:
                     print(f"ERROR: No VKAPI for group {group_id}", flush=True)
                     return web.Response(text="ok")
-                print(f"Handling message_new for group {group_id}", flush=True)
+                # Track current group for course routing
+                self.current_group_id = group_id
+                self.current_course_index = GROUP_COURSE_MAP.get(group_id, 1)
+                print(f"Handling message_new for group {group_id} (course {self.current_course_index})", flush=True)
                 await self._handle_message_new(data)
                 return web.Response(text="ok")
             
@@ -2029,18 +2058,16 @@ class WebServer:
         """Send user's main menu with dynamic keyboard based on their state."""
         # Get user data
         user_data = await db.get_user(user_id)
+        course_index = self._get_course_index()
         
         # Check user roles
         is_admin = (user_id == USER_ADMIN_ID)
         is_manager = (user_id in USER_MEN_IDS)
         is_marketing = (user_id in USER_MAR_IDS)
         
-        # Get user state
+        # Get user state for current course
         form_first_status = user_data.get("form_first", 0) if user_data else 0
-        test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
-        practice_1_status = user_data.get("practice_1", 0) if user_data else 0
-        access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
-        diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+        cf = self._get_user_course_fields(user_data, course_index)
         fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
         
         keyboard = create_dynamic_menu_keyboard(
@@ -2048,11 +2075,12 @@ class WebServer:
             is_manager=is_manager,
             is_marketing=is_marketing,
             form_first=form_first_status,
-            test_book_1=test_book_1_status,
-            practice_1=practice_1_status,
-            access_survey_1=access_survey_1_status,
-            diploma_1=diploma_1_status,
-            fortune_wheel=fortune_wheel_spins
+            test_book=cf["test_book"],
+            practice=cf["practice"],
+            access_survey=cf["access_survey"],
+            diploma=cf["diploma"],
+            fortune_wheel=fortune_wheel_spins,
+            course_index=course_index
         )
         
         await self.vk_api.send_message(
@@ -2170,11 +2198,9 @@ class WebServer:
                 
                 # Get status - now using INTEGER values
                 # 0 = inaccessible, 1 = accessible (show button), 2 = completed
+                course_index = self._get_course_index()
                 form_first_status = user_data.get("form_first", 0) if user_data else 0
-                test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
-                practice_1_status = user_data.get("practice_1", 0) if user_data else 0
-                access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
-                diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+                cf = self._get_user_course_fields(user_data, course_index)
                 fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
                 
                 # Choose appropriate keyboard (same logic as Menu)
@@ -2184,11 +2210,12 @@ class WebServer:
                     is_manager=is_manager,
                     is_marketing=is_marketing,
                     form_first=form_first_status,
-                    test_book_1=test_book_1_status,
-                    practice_1=practice_1_status,
-                    access_survey_1=access_survey_1_status,
-                    diploma_1=diploma_1_status,
-                    fortune_wheel=fortune_wheel_spins
+                    test_book=cf["test_book"],
+                    practice=cf["practice"],
+                    access_survey=cf["access_survey"],
+                    diploma=cf["diploma"],
+                    fortune_wheel=fortune_wheel_spins,
+                    course_index=course_index
                 )
                 
                 await self.vk_api.send_message(
@@ -2247,11 +2274,9 @@ class WebServer:
                 
                 # Get status - now using INTEGER values
                 # 0 = inaccessible, 1 = accessible (show button), 2 = completed
+                course_index = self._get_course_index()
                 form_first_status = user_data.get("form_first", 0) if user_data else 0
-                test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
-                practice_1_status = user_data.get("practice_1", 0) if user_data else 0
-                access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
-                diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+                cf = self._get_user_course_fields(user_data, course_index)
                 fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
                 
                 # Choose appropriate keyboard based on user state
@@ -2261,11 +2286,12 @@ class WebServer:
                     is_manager=is_manager,
                     is_marketing=is_marketing,
                     form_first=form_first_status,
-                    test_book_1=test_book_1_status,
-                    practice_1=practice_1_status,
-                    access_survey_1=access_survey_1_status,
-                    diploma_1=diploma_1_status,
-                    fortune_wheel=fortune_wheel_spins
+                    test_book=cf["test_book"],
+                    practice=cf["practice"],
+                    access_survey=cf["access_survey"],
+                    diploma=cf["diploma"],
+                    fortune_wheel=fortune_wheel_spins,
+                    course_index=course_index
                 )
                 
                 await self.vk_api.send_message(
@@ -2760,16 +2786,12 @@ class WebServer:
             
             # Handle "Финальная анкета" / "Финальное анкетирование" button
             if text.lower() in ["финальная анкета", "финальное анкетирование"]:
-                # Determine which course the user has access to (access_survey_X == 1)
+                # Check access for the current group's course (access_survey_{N} == 1)
+                course_index = self._get_course_index()
                 user_data = await db.get_user(user_id)
-                course = None
-                if user_data:
-                    for c in range(1, 5):
-                        if user_data.get(f"access_survey_{c}", 0) == 1:
-                            course = c
-                            break
+                cf = self._get_user_course_fields(user_data, course_index)
                 
-                if not course:
+                if cf["access_survey"] != 1:
                     await self.vk_api.send_message(
                         user_id=user_id,
                         message="У вас нет доступа к финальному анкетированию.",
@@ -2778,7 +2800,7 @@ class WebServer:
                     )
                     return
                 
-                await self._start_final_form(user_id, peer_id, course)
+                await self._start_final_form(user_id, peer_id, course_index)
                 return
             
             # Handle "Колесо фортуны" button from main menu
@@ -2891,15 +2913,16 @@ class WebServer:
                 except Exception as e:
                     print(f"Error getting user info: {e}", flush=True)
                 
-                # Update practice_1 in database: 2 = completed (button pressed)
-                await db.update_user_field(user_id, "practice_1", 2)
-                print(f"Practice 1 button clicked for user {user_id}, practice_1 set to 2", flush=True)
+                # Update practice_{N} in database: 2 = completed (button pressed)
+                course_index = self._get_course_index()
+                await db.update_user_field(user_id, f"practice_{course_index}", 2)
+                print(f"Practice {course_index} button clicked for user {user_id}, practice_{course_index} set to 2", flush=True)
                 
                 # Notify all managers (USER_MEN_IDS) - need to open access to final survey
                 if USER_MEN_IDS:
                     user_link = f"[id{user_id}|{user_name}]"
-                    msg_template = TEXTS_DATA.get("practice_notification", "🎯 Пользователь {user_link} сдал(а) Практику в Курс 1!\n\nОткройте доступ к финальному анкетированию через АДМИН → Открыть доступ к Анкете")
-                    admin_message = msg_template.format(user_link=user_link)
+                    msg_template = TEXTS_DATA.get("practice_notification", "🎯 Пользователь {user_link} сдал(а) Практику в Курс {course}!\n\nОткройте доступ к финальному анкетированию через АДМИН → Открыть доступ к Анкете")
+                    admin_message = msg_template.format(user_link=user_link, course=course_index)
                     for admin_id in USER_MEN_IDS:
                         try:
                             await self.vk_api.send_message(
@@ -2927,10 +2950,8 @@ class WebServer:
                 
                 if form_first_status == 2:
                     # Get all statuses for dynamic keyboard
-                    test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
-                    practice_1_status = user_data.get("practice_1", 0) if user_data else 0
-                    access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
-                    diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+                    course_index = self._get_course_index()
+                    cf = self._get_user_course_fields(user_data, course_index)
                     fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
                     
                     keyboard = create_dynamic_menu_keyboard(
@@ -2938,11 +2959,12 @@ class WebServer:
                     is_manager=is_manager,
                     is_marketing=is_marketing,
                         form_first=form_first_status,
-                        test_book_1=test_book_1_status,
-                        practice_1=practice_1_status,
-                        access_survey_1=access_survey_1_status,
-                        diploma_1=diploma_1_status,
-                        fortune_wheel=fortune_wheel_spins
+                        test_book=cf["test_book"],
+                        practice=cf["practice"],
+                        access_survey=cf["access_survey"],
+                        diploma=cf["diploma"],
+                        fortune_wheel=fortune_wheel_spins,
+                        course_index=course_index
                     )
                     await self.vk_api.send_message(
                         user_id=user_id,
@@ -2981,16 +3003,14 @@ class WebServer:
             
             # Handle "Тестирование" button
             if text.lower() == "тестирование":
-                # Check if user has access to test (test_book_1 == 1)
+                # Check if user has access to test (test_book_{N} == 1)
+                course_index = self._get_course_index()
                 user_data = await db.get_user(user_id)
-                test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
+                cf = self._get_user_course_fields(user_data, course_index)
                 
-                if test_book_1_status != 1:
+                if cf["test_book"] != 1:
                     # Get all statuses for dynamic keyboard
                     form_first_status = user_data.get("form_first", 0) if user_data else 0
-                    practice_1_status = user_data.get("practice_1", 0) if user_data else 0
-                    access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
-                    diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
                     fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
                     
                     keyboard = create_dynamic_menu_keyboard(
@@ -2998,11 +3018,12 @@ class WebServer:
                     is_manager=is_manager,
                     is_marketing=is_marketing,
                         form_first=form_first_status,
-                        test_book_1=test_book_1_status,
-                        practice_1=practice_1_status,
-                        access_survey_1=access_survey_1_status,
-                        diploma_1=diploma_1_status,
-                        fortune_wheel=fortune_wheel_spins
+                        test_book=cf["test_book"],
+                        practice=cf["practice"],
+                        access_survey=cf["access_survey"],
+                        diploma=cf["diploma"],
+                        fortune_wheel=fortune_wheel_spins,
+                        course_index=course_index
                     )
                     await self.vk_api.send_message(
                         user_id=user_id,
@@ -3017,18 +3038,12 @@ class WebServer:
             
             # Handle "Скачать диплом" button
             if text.lower() == "скачать диплом":
-                # Check if user has diploma available (diploma_X == 1)
+                # Check if user has diploma available for the current group's course
+                course_index = self._get_course_index()
                 user_data = await db.get_user(user_id)
-                diploma_status = None
-                course = None
-                if user_data:
-                    for c in range(1, 5):
-                        if user_data.get(f"diploma_{c}", 0) == 1:
-                            diploma_status = 1
-                            course = c
-                            break
+                cf = self._get_user_course_fields(user_data, course_index)
                 
-                if diploma_status != 1:
+                if cf["diploma"] != 1:
                     await self.vk_api.send_message(
                         user_id=user_id,
                         message="У вас нет доступного диплома.",
@@ -3047,10 +3062,10 @@ class WebServer:
                     today = datetime.now()
                     date_str = today.strftime("%d.%m.%Y")
                     
-                    # Generate diploma
-                    diploma_data = generate_diploma(course, komu_vydan, date_str)
+                    # Generate diploma for current course
+                    diploma_data = generate_diploma(course_index, komu_vydan, date_str)
                     if diploma_data:
-                        filename = f"diploma_course_{course}_{user_id}.png"
+                        filename = f"diploma_course_{course_index}_{user_id}.png"
                         await self.vk_api.send_document(
                             peer_id=peer_id,
                             file_data=diploma_data,
@@ -3215,7 +3230,8 @@ class WebServer:
             "variant": variant_idx,
             "question": 0,
             "score": 0,
-            "shuffled_answers": None
+            "shuffled_answers": None,
+            "course_index": self._get_course_index()
         }
         
         # Send first question
@@ -3336,9 +3352,12 @@ class WebServer:
             print(f"Error getting user info: {e}", flush=True)
         
         # Send notification to all managers
+        # Use course_index from session (stored when test started)
+        session = USER_SESSIONS.get(user_id)
+        course_index = session.get("course_index", self._get_course_index()) if session else self._get_course_index()
         if USER_MEN_IDS:
             status = "СДАЛ" if passed else "НЕ СДАЛ"
-            admin_message = f"Пользователь {user_display} {status} тест!\nРезультат: {score}/{total}"
+            admin_message = f"Пользователь {user_display} {status} тест Курса {course_index}!\nРезультат: {score}/{total}"
             for men_id in USER_MEN_IDS:
                 try:
                     await self.vk_api.send_message(
@@ -3352,28 +3371,20 @@ class WebServer:
         # Get user form status for correct keyboard
         user_data = await db.get_user(user_id)
         form_completed = user_data.get("form_first", False) if user_data else False
-        has_final_survey_access = any([
-            user_data.get("access_survey_1", False),
-            user_data.get("access_survey_2", False),
-            user_data.get("access_survey_3", False),
-            user_data.get("access_survey_4", False)
-        ]) if user_data else False
+        has_final_survey_access = user_data.get(f"access_survey_{course_index}", False) if user_data else False
         
         # Send result to user
         if passed:
-            # Update test_book_1 in database: 2 = completed (test passed)
-            await db.update_user_field(user_id, "test_book_1", 2)
+            # Update test_book_{N} in database: 2 = completed (test passed)
+            await db.update_user_field(user_id, f"test_book_{course_index}", 2)
             
-            # Set practice_1 = 1 to show "Сдал(а) практику" button
-            await db.update_user_field(user_id, "practice_1", 1)
+            # Set practice_{N} = 1 to show "Сдал(а) практику" button
+            await db.update_user_field(user_id, f"practice_{course_index}", 1)
             
             # Get user data for keyboard
             user_data = await db.get_user(user_id)
             form_first_status = user_data.get("form_first", 0) if user_data else 0
-            test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
-            practice_1_status = user_data.get("practice_1", 0) if user_data else 0
-            access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
-            diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+            cf = self._get_user_course_fields(user_data, course_index)
             fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
             
             keyboard = create_dynamic_menu_keyboard(
@@ -3381,11 +3392,12 @@ class WebServer:
                     is_manager=is_manager,
                     is_marketing=is_marketing,
                 form_first=form_first_status,
-                test_book_1=test_book_1_status,
-                practice_1=practice_1_status,
-                access_survey_1=access_survey_1_status,
-                diploma_1=diploma_1_status,
-                fortune_wheel=fortune_wheel_spins
+                test_book=cf["test_book"],
+                practice=cf["practice"],
+                access_survey=cf["access_survey"],
+                diploma=cf["diploma"],
+                fortune_wheel=fortune_wheel_spins,
+                course_index=course_index
             )
             
             passed_text = TEXTS_DATA.get("test_passed", "🎉 Поздравляем! Вы сдали тест!")
@@ -3486,22 +3498,21 @@ class WebServer:
         await db.update_user_field(user_id, "user_name", user_name)
         await db.update_user_field(user_id, "form_first_answer", form_answer)
         await db.update_user_field(user_id, "form_first", 2)  # 2 = completed
-        await db.update_user_field(user_id, "test_book_1", 1)  # 1 = accessible (show test button)
+        # Unlock test access for the current group's course
+        course_index = self._get_course_index()
+        await db.update_user_field(user_id, f"test_book_{course_index}", 1)  # 1 = accessible (show test button)
         
-        print(f"Form completed for user {user_id}, name: {user_name}", flush=True)
+        print(f"Form completed for user {user_id}, name: {user_name} (course {course_index})", flush=True)
         
         # Check if user is admin/manager/marketing
         is_admin = (user_id == USER_ADMIN_ID)
         is_manager = (user_id in USER_MEN_IDS)
         is_marketing = (user_id in USER_MAR_IDS)
         
-        # Get user data for keyboard (form_first=2, test_book_1=1 at this point)
+        # Get user data for keyboard (form_first=2, test_book_{N}=1 at this point)
         user_data = await db.get_user(user_id)
         form_first_status = user_data.get("form_first", 0) if user_data else 0
-        test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
-        practice_1_status = user_data.get("practice_1", 0) if user_data else 0
-        access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
-        diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+        cf = self._get_user_course_fields(user_data, course_index)
         fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
         
         keyboard = create_dynamic_menu_keyboard(
@@ -3509,11 +3520,12 @@ class WebServer:
             is_manager=is_manager,
             is_marketing=is_marketing,
             form_first=form_first_status,
-            test_book_1=test_book_1_status,
-            practice_1=practice_1_status,
-            access_survey_1=access_survey_1_status,
-            diploma_1=diploma_1_status,
-            fortune_wheel=fortune_wheel_spins
+            test_book=cf["test_book"],
+            practice=cf["practice"],
+            access_survey=cf["access_survey"],
+            diploma=cf["diploma"],
+            fortune_wheel=fortune_wheel_spins,
+            course_index=course_index
         )
         
         # Send completion message
@@ -3864,13 +3876,11 @@ class WebServer:
         is_manager = user_id in USER_MEN_IDS
         is_marketing = user_id in USER_MAR_IDS
         
-        # Get user data for keyboard
+        # Get user data for keyboard (use current course index)
+        course_index = self._get_course_index()
         user_data = await db.get_user(user_id)
         form_first_status = user_data.get("form_first", 0) if user_data else 0
-        test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
-        practice_1_status = user_data.get("practice_1", 0) if user_data else 0
-        access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
-        diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+        cf = self._get_user_course_fields(user_data, course_index)
         fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
         
         keyboard = create_dynamic_menu_keyboard(
@@ -3878,11 +3888,12 @@ class WebServer:
             is_manager=is_manager,
             is_marketing=is_marketing,
             form_first=form_first_status,
-            test_book_1=test_book_1_status,
-            practice_1=practice_1_status,
-            access_survey_1=access_survey_1_status,
-            diploma_1=diploma_1_status,
-            fortune_wheel=fortune_wheel_spins
+            test_book=cf["test_book"],
+            practice=cf["practice"],
+            access_survey=cf["access_survey"],
+            diploma=cf["diploma"],
+            fortune_wheel=fortune_wheel_spins,
+            course_index=course_index
         )
         
         # Send congratulations
@@ -3986,6 +3997,7 @@ class WebServer:
 
     async def _spin_fortune_wheel(self, user_id: int, peer_id: int) -> None:
         """Spin the fortune wheel and award prize."""
+        course_index = self._get_course_index()
         user_data = await db.get_user(user_id)
         fortune_wheel_spins = user_data.get("fortune_wheel", 0) if user_data else 0
         
@@ -3995,10 +4007,7 @@ class WebServer:
             is_manager = user_id in USER_MEN_IDS
             is_marketing = user_id in USER_MAR_IDS
             form_first_status = user_data.get("form_first", 0) if user_data else 0
-            test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
-            practice_1_status = user_data.get("practice_1", 0) if user_data else 0
-            access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
-            diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+            cf = self._get_user_course_fields(user_data, course_index)
             
             await self.vk_api.send_message(
                 user_id=user_id,
@@ -4009,11 +4018,12 @@ class WebServer:
                     is_manager=is_manager,
                     is_marketing=is_marketing,
                     form_first=form_first_status,
-                    test_book_1=test_book_1_status,
-                    practice_1=practice_1_status,
-                    access_survey_1=access_survey_1_status,
-                    diploma_1=diploma_1_status,
-                    fortune_wheel=fortune_wheel_spins
+                    test_book=cf["test_book"],
+                    practice=cf["practice"],
+                    access_survey=cf["access_survey"],
+                    diploma=cf["diploma"],
+                    fortune_wheel=fortune_wheel_spins,
+                    course_index=course_index
                 )
             )
             return
@@ -4033,21 +4043,19 @@ class WebServer:
         is_manager = user_id in USER_MEN_IDS
         is_marketing = user_id in USER_MAR_IDS
         form_first_status = user_data.get("form_first", 0) if user_data else 0
-        test_book_1_status = user_data.get("test_book_1", 0) if user_data else 0
-        practice_1_status = user_data.get("practice_1", 0) if user_data else 0
-        access_survey_1_status = user_data.get("access_survey_1", 0) if user_data else 0
-        diploma_1_status = user_data.get("diploma_1", 0) if user_data else 0
+        cf = self._get_user_course_fields(user_data, course_index)
         
         keyboard = create_dynamic_menu_keyboard(
             is_admin=is_admin,
             is_manager=is_manager,
             is_marketing=is_marketing,
             form_first=form_first_status,
-            test_book_1=test_book_1_status,
-            practice_1=practice_1_status,
-            access_survey_1=access_survey_1_status,
-            diploma_1=diploma_1_status,
-            fortune_wheel=fortune_wheel_spins
+            test_book=cf["test_book"],
+            practice=cf["practice"],
+            access_survey=cf["access_survey"],
+            diploma=cf["diploma"],
+            fortune_wheel=fortune_wheel_spins,
+            course_index=course_index
         )
         
         # Notify about prize
