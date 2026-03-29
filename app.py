@@ -16,7 +16,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from PIL import Image, ImageDraw, ImageFont
 
-# VK Bot - Академия BVC (multi-group, per-course tests)
+# VK Bot - Академия BVC v2 (multi-group, per-course tests)
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
