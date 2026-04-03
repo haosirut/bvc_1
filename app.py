@@ -3251,9 +3251,15 @@ class WebServer:
             )
             return
         
-        # Send intro text with course number
-        intro_text = TEXTS_DATA.get("test_intro", "Начинаем тестирование!")
-        intro_text = intro_text.replace("1-го", f"{course_index}-го")
+        # Send intro text with course-specific data
+        intro_template = TEXTS_DATA.get("test_intro", "Начинаем тестирование!")
+        total_q = td.get("test_info", {}).get("total_questions", 20)
+        passing_sc = td.get("test_info", {}).get("passing_score", total_q - 2)
+        intro_text = intro_template.format(
+            course=course_index,
+            passing_score=passing_sc,
+            total_questions=total_q
+        )
         await self.vk_api.send_message(
             user_id=user_id,
             message=intro_text,
