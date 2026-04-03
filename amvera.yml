@@ -6,6 +6,7 @@ meta:
 
 build:
   requirementsPath: requirements.txt
+  useCache: false
 
 run:
   scriptName: app.py
