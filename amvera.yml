@@ -11,3 +11,7 @@ run:
   scriptName: app.py
   containerPort: 8080
   servicePort: 8080
+
+# Force rebuild 2026-04-03
+meta:
+  name: myapp
