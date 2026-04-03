@@ -112,7 +112,7 @@ logger = logging.getLogger("vk_bot")
 
 # Print startup info
 print("=" * 50, flush=True)
-print("VK BOT STARTING [v2.0-gr-fix]", flush=True)
+print("VK BOT STARTING [v2.1-gr-fix]", flush=True)
 print(f"GROUPS CONFIGURED: {len(GROUP_CONFIGS)} ({list(GROUP_CONFIGS.keys())})", flush=True)
 print(f"USER_MEN_IDS (Managers): {USER_MEN_IDS}", flush=True)
 print(f"USER_MAR_IDS (Marketing): {USER_MAR_IDS}", flush=True)
