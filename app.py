@@ -2187,8 +2187,8 @@ class WebServer:
                     return
             
             # Handle "Start" button
-            # Skip if user is in active session - let session handlers process the input
-            if text.lower() in ["начать", "start", "/start"] and user_id not in FINAL_FORM_SESSIONS and user_id not in USER_SESSIONS and user_id not in FORM_SESSIONS:
+            # Always handle "Начать" — clear any active sessions and show menu
+            if text.lower() in ["начать", "start", "/start"]:
                 # Clear any existing sessions
                 if user_id in USER_SESSIONS:
                     del USER_SESSIONS[user_id]
@@ -3251,8 +3251,15 @@ class WebServer:
             )
             return
         
-        # Send intro text
-        intro_text = TEXTS_DATA.get("test_intro", "Начинаем тестирование!")
+        # Send intro text with course-specific data
+        intro_template = TEXTS_DATA.get("test_intro", "Начинаем тестирование!")
+        total_q = td.get("test_info", {}).get("total_questions", 20)
+        passing_sc = td.get("test_info", {}).get("passing_score", total_q - 2)
+        intro_text = intro_template.format(
+            course=course_index,
+            passing_score=passing_sc,
+            total_questions=total_q
+        )
         await self.vk_api.send_message(
             user_id=user_id,
             message=intro_text,
@@ -3724,15 +3731,15 @@ class WebServer:
             keyboard = create_final_form_open_keyboard()
         elif question_type == "buttons":
             buttons = question.get("buttons", [])
-            if buttons == ["Начать"]:
-                # Special keyboard for start button
+            if buttons == ["Приступить"]:
+                # Special keyboard for start button (final form)
                 keyboard = {
                     "one_time": False,
                     "inline": False,
                     "buttons": [
                         [
                             {
-                                "action": {"type": "text", "label": "Начать"},
+                                "action": {"type": "text", "label": "Приступить"},
                                 "color": "positive"
                             }
                         ]
@@ -4168,3 +4175,4 @@ async def async_main():
 
 if __name__ == "__main__":
     asyncio.run(async_main())
+
