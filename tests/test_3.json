@@ -1,8 +1,8 @@
 {
   "test_info": {
     "title": "Тестирование 3 курс",
-    "passing_score": 18,
-    "total_questions": 1
+    "passing_score": 14,
+    "total_questions": 16
   },
   "variants": [
     {
@@ -10,11 +10,1020 @@
       "questions": [
         {
           "question_number": 1,
-          "question": "Тестирование для данного курса пока не загружено. Свяжитесь с администратором.",
+          "question": "Что важно для эффективной тренировки?",
           "answers": [
-            {"id": 1, "text": "Понятно", "is_correct": true},
-            {"id": 2, "text": "Ок", "is_correct": false},
-            {"id": 3, "text": "Хорошо", "is_correct": false}
+            {
+              "id": 1,
+              "text": "Загнать себя в правильное состояние",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Моделировать сдачу аттестации",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Оба варианта верны",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 2,
+          "question": "Сколько турниров надо сыграть для попадания в сборную клуба?",
+          "answers": [
+            {
+              "id": 3,
+              "text": "5 турниров",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "50 турниров",
+              "is_correct": false
+            },
+            {
+              "id": 2,
+              "text": "100 турниров",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 3,
+          "question": "Какую книгу стоит прочитать любому ученику клуба?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "\"Парадокс Шимпанзе\"",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "\"Золотой Ключик\"",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "\"Отверженные\"",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 4,
+          "question": "Какой важнейший критерий принятия решений?",
+          "answers": [
+            {
+              "id": 3,
+              "text": "Как это влияет на мою оболочку?",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Как дорого это стоит?",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Где это находится?",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 5,
+          "question": "Что надо сделать для повышения скорости обучения?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Тренироваться и играть в одной зоне",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "Менять зону каждую тренировку",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Зоны не влияют на скорость обучения",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 6,
+          "question": "Как правильно договариваться с напарником?",
+          "answers": [
+            {
+              "id": 3,
+              "text": "Рисуем на бумаге, потом рисуем на песке.",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "Рисуем на бумаге.",
+              "is_correct": false
+            },
+            {
+              "id": 2,
+              "text": "Рисуем на песке.",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 7,
+          "question": "Какие подачи называются золотыми?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Которые необходимо 100% подать",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Которые приносят 2 очка",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Которые не подает соперник",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 8,
+          "question": "Сколько подач надо подать на турнире?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Все, кроме одной",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Абсолютно все",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Хотя бы 50%",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 9,
+          "question": "Стратегия эффективного приема на третьем курсе?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Перебиваем на ту сторону гнилые яблочки. Разыгрываем спелые",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "Всегда перебиваем на ту сторону",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Всегда разыгрываем",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 10,
+          "question": "Что надо делать с простым мячом в приеме?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Сыграть мяч на \"сразу\" со второго касания",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "Перебить его с первого касания",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Сыграть на три касания",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 11,
+          "question": "Что такое \"атакующая передача\"?",
+          "answers": [
+            {
+              "id": 3,
+              "text": "Передача на трос, не боясь, что мяч перелетит на ту сторону",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Передача на сторону соперника",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Передача \"рядом\"",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 12,
+          "question": "Какая подсказка партнеру эффективна на нашем уровне?",
+          "answers": [
+            {
+              "id": 3,
+              "text": "Близко или далеко относительно слабого игрока",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Номер зоны",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Подсказка о наличии блока",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 13,
+          "question": "Что меняется при атаке из третьей зоны?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Угол разбега. 60 и 90 градусов.",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Заказ передачи. \"Над собой\"",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "И то, и другое",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 14,
+          "question": "Когда можно бросить руку? Единственное исключение",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Высокий игрок, удар в ход, удобная передача",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Низкий игрок, удар по линии, удобная передача",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Руку никогда нельзя бросить. И никому!",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 15,
+          "question": "Как делится площадка при атаке соперником с первого касания?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Передняя и задняя часть",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Левая и правая часть",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Два радиуса: большой и маленький",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 16,
+          "question": "Что самое главное надо сделать до игры?",
+          "answers": [
+            {
+              "id": 3,
+              "text": "Договориться с напарником обо всём, чем только можно",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Хорошенько отдохнуть!",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Помолиться для победы",
+              "is_correct": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "variant_number": 2,
+      "questions": [
+        {
+          "question_number": 1,
+          "question": "Что нужно добавить к тренеровкам, чтобы не получать травмы?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Специальную физическую подготовку",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "Тактические совещания",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Восстановление с друзьями в бане",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 2,
+          "question": "Зачем нужны турниры?",
+          "answers": [
+            {
+              "id": 3,
+              "text": "Чтобы начать играть в стрессе",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "Чтобы получить удовольствие",
+              "is_correct": false
+            },
+            {
+              "id": 2,
+              "text": "Чтобы было разнообразие",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 3,
+          "question": "Какой важный фактор необходим для обучения?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Ученик воспринимает учителя",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Человек знает твою фамилию",
+              "is_correct": false
+            },
+            {
+              "id": 2,
+              "text": "Оба человека знают друг друга",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 4,
+          "question": "За что мы боремся на тренировке?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "За состояние (14:15)",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "За победу",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "За хорошее настроение",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 5,
+          "question": "Как определить свою зону?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Она там, где тебе удобнее принимать",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Она там, где удобнее пасовать",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "У правшей она справа, у левшей - слева",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 6,
+          "question": "Что важно сделать до игры на турнире?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Проверить высоту сетки",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "Проверить размеры корта",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Оба варианта верны",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 7,
+          "question": "Какая цель на подаче для победы на нашем уровне?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Подать в слабого игрока",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Подать как-то",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Подать в сильного игрока",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 8,
+          "question": "Какое ключевое действие на подаче?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Не бросаем руку после подачи",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Подаем на выдохе",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Смотрим на сторону соперника",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 9,
+          "question": "Что нового появляется на приеме на третьем курсе?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Ритуал для входа в зону приема",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Заказ передачи до приема",
+              "is_correct": false
+            },
+            {
+              "id": 2,
+              "text": "Угрожающая улыбка для соперников",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 10,
+          "question": "О чем думает принимающий простой мяч на \"сразу\"?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Где находится бьющая рука партнера",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "Как бы подбить мяч повыше",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Где находится соперник",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 11,
+          "question": "Что важно для атакующей передачи?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Чтобы нападающий не боялся тросовых мячей",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Наличие встречного ветра",
+              "is_correct": false
+            },
+            {
+              "id": 2,
+              "text": "Выбитый в приеме мяч подальше от сетки",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 12,
+          "question": "Что важно скорректировать при передаче \"между\" из глубины?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Ждем не в пробеле, а открываемся дальше и боком к пасующему",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Бежим ближе к сетке как можно скорее",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Делаем всё, чтобы перебить мяч снизу",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 13,
+          "question": "Какой новый тип эффективной атаки?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "\"Пук\", в третью зону",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "\"Тык\" в первую зону",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "\"Бамс\" в пятую зону",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 14,
+          "question": "Какая корректировка позволит атаковать с большего числа передач?",
+          "answers": [
+            {
+              "id": 3,
+              "text": "Атака с двух шагов, в один шаг от пробела.",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Разбег плечом к плечу с пасующим",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Заказ передачи до приема",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 15,
+          "question": "Как делится площадка при атаке соперником со второго касания?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Два радиуса: большой и маленький",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Левая и правая часть",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Ближняя и дальняя часть",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 16,
+          "question": "Что надо помнить в защите?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Достать всё невозможно",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Есть красная, желтая и зеленая зоны",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Оба утверждения верны",
+              "is_correct": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "variant_number": 3,
+      "questions": [
+        {
+          "question_number": 1,
+          "question": "Самый быстрый путь к прогрессу - это..?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Найти наставника",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Тренироваться по 2 раза в день без остановки",
+              "is_correct": false
+            },
+            {
+              "id": 2,
+              "text": "Только играть турниры",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 2,
+          "question": "Что такое BVC PRO?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Первая энциклопедия, в которой есть многие ответы на твои вопросы",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Группа достижений",
+              "is_correct": false
+            },
+            {
+              "id": 2,
+              "text": "Четвертый курс академии",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 3,
+          "question": "Что такое \"миксты\" на наш взгляд?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Рыцарь + принцесса",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Рыцарь + рыцарь",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Принцесса + принцесса",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 4,
+          "question": "Что такое \"оболочка\"?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Это эффективное состояние для игры",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "Это часть подачи",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Такого термина нет",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 5,
+          "question": "Какой самый главный вопрос в выборе стратегии?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Играем или выигрываем?",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "До скольки играем?",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Ты в какой зоне?",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 6,
+          "question": "Как определить слабого игрока?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Спрашиваем у окружающих, потом смотрим на игроков",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "Надо подбросить монетку",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Его невозможно определить",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 7,
+          "question": "Самый эффективный способ набора очков?",
+          "answers": [
+            {
+              "id": 3,
+              "text": "Подача",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Атака стоя",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Атака в прыжке",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 8,
+          "question": "Какая цель подачи на нашем уровне?",
+          "answers": [
+            {
+              "id": 3,
+              "text": "Сдвинуть игрока в приеме",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Сделать так, чтобы мяч перелетел через сетку",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Подать за середину корта",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 9,
+          "question": "По чему можно понять, куда полетит подача",
+          "answers": [
+            {
+              "id": 3,
+              "text": "По набросу мяча подающим игроком",
+              "is_correct": true
+            },
+            {
+              "id": 1,
+              "text": "По ветру и солнцу",
+              "is_correct": false
+            },
+            {
+              "id": 2,
+              "text": "По вращению мяча",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 10,
+          "question": "Когда мы смотрим на ту сторону второй раз?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "В момент передачи",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "В момент атаки",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "После атаки",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 11,
+          "question": "Что такое передача \"между\"?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Полметра от антенны, зона диаметром один метр",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Передача между зон",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Передача между игроками",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 12,
+          "question": "Что надо сделать после передачи при игре без блока?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Уходим в зону ожидания контролировать переходящие мячи",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Страховать отскок от блока",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Наслаждаться передачей",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 13,
+          "question": "Куда неэффективно атаковать на вашем уровне?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Центральная треть корта",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Ближняя часть корта",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Дальняя часть корта",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 14,
+          "question": "Какое эффективное действие со второй зоны и выбитого мяча?",
+          "answers": [
+            {
+              "id": 2,
+              "text": "Атака по ходу",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Атака по линии",
+              "is_correct": false
+            },
+            {
+              "id": 1,
+              "text": "Перевод мяча снизу двумя руками в центр корта",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 15,
+          "question": "Как делится площадка при атаке соперником с третьего касания?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Левая и правая часть",
+              "is_correct": true
+            },
+            {
+              "id": 3,
+              "text": "Два радиуса: большой и маленький",
+              "is_correct": false
+            },
+            {
+              "id": 2,
+              "text": "Ближняя и дальняя часть",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 16,
+          "question": "Если нам часто играют глубоко в линию, что можно сделать в оттяжке?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Оттянуться лицом к боковой линии",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Оттянуться по полной",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Оттянуться по диагонали",
+              "is_correct": false
+            }
           ]
         }
       ]
