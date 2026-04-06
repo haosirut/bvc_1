@@ -2883,7 +2883,8 @@ class WebServer:
             # Handle final form sessions (buttons, rating, open questions)
             if user_id in FINAL_FORM_SESSIONS:
                 session = FINAL_FORM_SESSIONS[user_id]
-                question = get_final_form_question(session["current_question"])
+                form_data = session.get("form_data", FINAL_FORM_DATA)
+                question = get_final_form_question(session["current_question"], form_data)
                 
                 if question:
                     question_type = question.get("type", "open")
@@ -2891,7 +2892,8 @@ class WebServer:
                     # Handle button-type questions - only accept matching buttons
                     if question_type == "buttons":
                         buttons = question.get("buttons", [])
-                        if text in buttons or text in ["Верно", "Изменить ФИ и Кому выдан"]:
+                        if text in buttons or text in ["Верно", "Изменить ФИ"]:
+                            logger.info(f"Final form button: user={user_id}, qid={session['current_question']}, button={text}")
                             await self._handle_final_form_button(user_id, peer_id, text)
                             return
                         else:
@@ -2911,6 +2913,7 @@ class WebServer:
                             min_val = question.get("min", 1)
                             max_val = question.get("max", 10)
                             if min_val <= rating <= max_val:
+                                logger.info(f"Final form rating: user={user_id}, qid={session['current_question']}, rating={rating}")
                                 await self._handle_final_form_button(user_id, peer_id, text)
                                 return
                             else:
@@ -2937,6 +2940,7 @@ class WebServer:
                     
                     # Handle open questions (text input)
                     if question_type == "open":
+                        logger.info(f"Final form answer: user={user_id}, qid={session['current_question']}, answer={text[:50]}")
                         await self._handle_final_form_answer(user_id, peer_id, text)
                         return
             
@@ -3798,6 +3802,45 @@ class WebServer:
         if not question:
             return
         
+        question_type = question.get("type", "open")
+        
+        # Validate question type matches expected input (defense in depth)
+        # If question is rating but came here as text — validate as rating
+        if question_type == "rating":
+            try:
+                rating_val = int(answer.strip())
+                min_val = question.get("min", 1)
+                max_val = question.get("max", 10)
+                if not (min_val <= rating_val <= max_val):
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message=f"Пожалуйста, введите число от {min_val} до {max_val} или используйте кнопки.",
+                        peer_id=peer_id,
+                        keyboard=create_rating_keyboard(min_val, max_val)
+                    )
+                    return
+                # Valid rating via text — delegate to button handler for proper branching
+                await self._handle_final_form_button(user_id, peer_id, str(rating_val))
+                return
+            except ValueError:
+                await self.vk_api.send_message(
+                    user_id=user_id,
+                    message="Пожалуйста, используйте кнопки для оценки или введите число.",
+                    peer_id=peer_id,
+                    keyboard=create_rating_keyboard(question.get("min", 1), question.get("max", 10))
+                )
+                return
+        
+        # If question is buttons but came here as text — reject
+        elif question_type == "buttons":
+            await self.vk_api.send_message(
+                user_id=user_id,
+                message=TEXTS_DATA.get("use_buttons_message", "Пожалуйста, используйте кнопки для ответа."),
+                peer_id=peer_id
+            )
+            return
+        
+        # For "open" questions — accept any text
         # Save answer using question_id as key (for proper formatting in finish)
         session["answers"][question_id] = answer
         
@@ -3841,16 +3884,31 @@ class WebServer:
         
         question_type = question.get("type", "open")
         
-        # For rating questions, validate the button
+        # For rating questions, validate the button value
         if question_type == "rating":
             try:
                 rating = int(button)
                 min_val = question.get("min", 1)
                 max_val = question.get("max", 10)
                 if rating < min_val or rating > max_val:
-                    return  # Invalid rating, ignore
+                    print(f"User {user_id} sent rating {rating} out of range [{min_val}-{max_val}], ignoring", flush=True)
+                    await self.vk_api.send_message(
+                        user_id=user_id,
+                        message=f"Пожалуйста, введите число от {min_val} до {max_val}.",
+                        peer_id=peer_id,
+                        keyboard=create_rating_keyboard(min_val, max_val)
+                    )
+                    return
             except ValueError:
-                return  # Not a number, ignore
+                print(f"User {user_id} sent non-number '{button}' for rating question, ignoring", flush=True)
+                return
+        
+        # For button questions, validate that button is in allowed list
+        elif question_type == "buttons":
+            allowed_buttons = question.get("buttons", [])
+            if button not in allowed_buttons:
+                print(f"Unexpected button '{button}' for question {question_id} (allowed: {allowed_buttons})", flush=True)
+                return
         
         # Save answer using question_id as key (skip "start" button - not a real answer)
         if question_id != "start":
