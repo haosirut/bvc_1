@@ -174,7 +174,7 @@ for _course_num in [1, 2, 3]:
 
 # Default/fallback: use course 1 form
 FINAL_FORM_DATA = FINAL_FORMS_DATA.get(1, {})
-DIPLOMA_CONFIG = load_json_file("diploma_config.json")
+CERTIFICATE_CONFIG = load_json_file("diploma_config.json")
 
 # -----------------------------------------------------------------------------
 # User Sessions Storage (in-memory)
@@ -858,7 +858,7 @@ def create_dynamic_menu_keyboard(
     test_book: int = 0,
     practice: int = 0,
     access_survey: int = 0,
-    diploma: int = 0,
+    certificate: int = 0,
     fortune_wheel: int = 0,
     course_index: int = 1
 ) -> Dict:
@@ -870,7 +870,7 @@ def create_dynamic_menu_keyboard(
     2. Тестирование (test_book_{N}=1)
     3. Сдал(а) практику (practice_{N}=1)
     4. Финальная анкета (access_survey_{N}=1)
-    5. Скачать диплом (diploma_{N}=1)
+    5. 📄 Скачать сертификат (diploma_{N}=1)
     
     N is determined by course_index (which VK group the user is in).
     Fortune wheel is separate (shown if fortune_wheel > 0)
@@ -909,9 +909,9 @@ def create_dynamic_menu_keyboard(
             "action": {"type": "text", "label": "Финальная анкета"},
             "color": "positive"
         }
-    elif diploma == 1:
+    elif certificate == 1:
         action_button = {
-            "action": {"type": "text", "label": "Скачать диплом"},
+            "action": {"type": "text", "label": "📄 Скачать сертификат"},
             "color": "positive"
         }
     
@@ -1631,26 +1631,26 @@ def is_physical_prize(prize_name: str) -> bool:
 
 
 # -----------------------------------------------------------------------------
-# Diploma Generation
+# Certificate Generation
 # -----------------------------------------------------------------------------
-def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
-    """Generate diploma image with name and date.
+def generate_certificate(course: int, name: str, date_str: str) -> Optional[bytes]:
+    """Generate certificate image with name and date.
     
     Args:
         course: Course number (1-4)
-        name: User name for diploma
-        date_str: Date string to put on diploma
+        name: User name for certificate
+        date_str: Date string to put on certificate
         
     Returns:
         PNG image as bytes or None if failed
     """
-    if not DIPLOMA_CONFIG:
-        logger.error("Diploma config not loaded")
+    if not CERTIFICATE_CONFIG:
+        logger.error("Certificate config not loaded")
         return None
     
-    course_config = DIPLOMA_CONFIG.get("courses", {}).get(str(course))
+    course_config = CERTIFICATE_CONFIG.get("courses", {}).get(str(course))
     if not course_config or not course_config.get("enabled"):
-        logger.warning(f"Diploma not available for course {course}")
+        logger.warning(f"Certificate not available for course {course}")
         return None
     
     template_path = course_config.get("template")
@@ -1665,7 +1665,7 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
         return None
     
     # Load font
-    font_path = os.path.join(BASE_DIR, DIPLOMA_CONFIG.get("font", "sert/RussoOne-Regular.ttf"))
+    font_path = os.path.join(BASE_DIR, CERTIFICATE_CONFIG.get("font", "sert/RussoOne-Regular.ttf"))
     if not os.path.exists(font_path):
         logger.error(f"Font not found: {font_path}")
         return None
@@ -1679,7 +1679,7 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
         img_width, img_height = img.size
         
         # Get field configs
-        fields = DIPLOMA_CONFIG.get("fields", {})
+        fields = CERTIFICATE_CONFIG.get("fields", {})
         
         # Draw each field
         for field_name, field_config in fields.items():
@@ -1761,7 +1761,7 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
         return output.getvalue()
         
     except Exception as e:
-        logger.error(f"Error generating diploma: {e}")
+        logger.error(f"Error generating certificate: {e}")
         return None
 
 
@@ -1787,25 +1787,25 @@ def create_users_xlsx(users: List[Dict]) -> bytes:
         "Практика 1",
         "Доступ к анкете 1",
         "Ответ анкеты 1",
-        "Диплом 1",
+        "Сертификат 1",
         # Курс 2
         "Тест 2",
         "Практика 2",
         "Доступ к анкете 2",
         "Ответ анкеты 2",
-        "Диплом 2",
+        "Сертификат 2",
         # Курс 3
         "Тест 3",
         "Практика 3",
         "Доступ к анкете 3",
         "Ответ анкеты 3",
-        "Диплом 3",
+        "Сертификат 3",
         # Курс 4
         "Тест 4",
         "Практика 4",
         "Доступ к анкете 4",
         "Ответ анкеты 4",
-        "Диплом 4",
+        "Сертификат 4",
         # Даты
         "Дата создания",
         "Дата обновления"
@@ -1964,25 +1964,25 @@ def parse_users_xlsx(file_data: bytes) -> List[Dict]:
             "practice_1": parse_status(row[header_map.get("Практика 1", 7)]),
             "access_survey_1": parse_status(row[header_map.get("Доступ к анкете 1", 8)]),
             "form_end_1": row[header_map.get("Ответ анкеты 1", 9)] or "",
-            "diploma_1": parse_status(row[header_map.get("Диплом 1", 10)]),
+            "diploma_1": parse_status(row[header_map.get("Сертификат 1", 10)]),
             # Курс 2
             "test_book_2": parse_status(row[header_map.get("Тест 2", 11)]),
             "practice_2": parse_status(row[header_map.get("Практика 2", 12)]),
             "access_survey_2": parse_status(row[header_map.get("Доступ к анкете 2", 13)]),
             "form_end_2": row[header_map.get("Ответ анкеты 2", 14)] or "",
-            "diploma_2": parse_status(row[header_map.get("Диплом 2", 15)]),
+            "diploma_2": parse_status(row[header_map.get("Сертификат 2", 15)]),
             # Курс 3
             "test_book_3": parse_status(row[header_map.get("Тест 3", 16)]),
             "practice_3": parse_status(row[header_map.get("Практика 3", 17)]),
             "access_survey_3": parse_status(row[header_map.get("Доступ к анкете 3", 18)]),
             "form_end_3": row[header_map.get("Ответ анкеты 3", 19)] or "",
-            "diploma_3": parse_status(row[header_map.get("Диплом 3", 20)]),
+            "diploma_3": parse_status(row[header_map.get("Сертификат 3", 20)]),
             # Курс 4
             "test_book_4": parse_status(row[header_map.get("Тест 4", 21)]),
             "practice_4": parse_status(row[header_map.get("Практика 4", 22)]),
             "access_survey_4": parse_status(row[header_map.get("Доступ к анкете 4", 23)]),
             "form_end_4": row[header_map.get("Ответ анкеты 4", 24)] or "",
-            "diploma_4": parse_status(row[header_map.get("Диплом 4", 25)]),
+            "diploma_4": parse_status(row[header_map.get("Сертификат 4", 25)]),
         }
         users.append(user)
     
@@ -2118,7 +2118,7 @@ class WebServer:
             test_book=cf["test_book"],
             practice=cf["practice"],
             access_survey=cf["access_survey"],
-            diploma=cf["diploma"],
+            certificate=cf["diploma"],
             fortune_wheel=fortune_wheel_spins,
             course_index=course_index
         )
@@ -2253,7 +2253,7 @@ class WebServer:
                     test_book=cf["test_book"],
                     practice=cf["practice"],
                     access_survey=cf["access_survey"],
-                    diploma=cf["diploma"],
+                    certificate=cf["diploma"],
                     fortune_wheel=fortune_wheel_spins,
                     course_index=course_index
                 )
@@ -2329,7 +2329,7 @@ class WebServer:
                     test_book=cf["test_book"],
                     practice=cf["practice"],
                     access_survey=cf["access_survey"],
-                    diploma=cf["diploma"],
+                    certificate=cf["diploma"],
                     fortune_wheel=fortune_wheel_spins,
                     course_index=course_index
                 )
@@ -3006,7 +3006,7 @@ class WebServer:
                         test_book=cf["test_book"],
                         practice=cf["practice"],
                         access_survey=cf["access_survey"],
-                        diploma=cf["diploma"],
+                        certificate=cf["diploma"],
                         fortune_wheel=fortune_wheel_spins,
                         course_index=course_index
                     )
@@ -3065,7 +3065,7 @@ class WebServer:
                         test_book=cf["test_book"],
                         practice=cf["practice"],
                         access_survey=cf["access_survey"],
-                        diploma=cf["diploma"],
+                        certificate=cf["diploma"],
                         fortune_wheel=fortune_wheel_spins,
                         course_index=course_index
                     )
@@ -3080,9 +3080,9 @@ class WebServer:
                 await self._start_test(user_id, peer_id)
                 return
             
-            # Handle "Скачать диплом" button
-            if text.lower() == "скачать диплом":
-                # Check if user has diploma available for the current group's course
+            # Handle '📄 Скачать сертификат' button
+            if text.lower() == "📄 скачать сертификат":
+                # Check if user has certificate available for the current group's course
                 course_index = self._get_course_index()
                 user_data = await db.get_user(user_id)
                 cf = self._get_user_course_fields(user_data, course_index)
@@ -3090,13 +3090,13 @@ class WebServer:
                 if cf["diploma"] != 1:
                     await self.vk_api.send_message(
                         user_id=user_id,
-                        message="У вас нет доступного диплома.",
+                        message="У вас нет доступного сертификата.",
                         peer_id=peer_id,
                         keyboard=create_main_menu_keyboard()
                     )
                     return
                 
-                # Generate and send diploma
+                # Generate and send certificate
                 try:
                     user_name = user_data.get("user_name", "Участник") if user_data else "Участник"
                     
@@ -3104,28 +3104,28 @@ class WebServer:
                     today = datetime.now()
                     date_str = today.strftime("%d.%m.%Y")
                     
-                    # Generate diploma for current course (using only user_name)
-                    diploma_data = generate_diploma(course_index, user_name, date_str)
-                    if diploma_data:
-                        filename = f"diploma_course_{course_index}_{user_id}.png"
+                    # Generate certificate for current course (using only user_name)
+                    certificate_data = generate_certificate(course_index, user_name, date_str)
+                    if certificate_data:
+                        filename = f"certificate_course_{course_index}_{user_id}.png"
                         await self.vk_api.send_document(
                             peer_id=peer_id,
-                            file_data=diploma_data,
+                            file_data=certificate_data,
                             filename=filename,
-                            message="🎓 Ваш диплом:"
+                            message="🎓 Ваш сертификат:"
                         )
                     else:
                         await self.vk_api.send_message(
                             user_id=user_id,
-                            message="Ошибка при генерации диплома. Обратитесь к администратору.",
+                            message="Ошибка при генерации сертификата. Обратитесь к администратору.",
                             peer_id=peer_id,
                             keyboard=create_main_menu_keyboard()
                         )
                 except Exception as e:
-                    logger.error(f"Failed to send diploma to user {user_id}: {e}")
+                    logger.error(f"Failed to send certificate to user {user_id}: {e}")
                     await self.vk_api.send_message(
                         user_id=user_id,
-                        message="Ошибка при отправке диплома. Обратитесь к администратору.",
+                        message="Ошибка при отправке сертификата. Обратитесь к администратору.",
                         peer_id=peer_id,
                         keyboard=create_main_menu_keyboard()
                     )
@@ -3462,13 +3462,13 @@ class WebServer:
                 test_book=cf["test_book"],
                 practice=cf["practice"],
                 access_survey=cf["access_survey"],
-                diploma=cf["diploma"],
+                certificate=cf["diploma"],
                 fortune_wheel=fortune_wheel_spins,
                 course_index=course_index
             )
             
             passed_text = TEXTS_DATA.get("test_passed", "🎉 Поздравляем! Вы сдали тест!")
-            practice_info = "\n\nЕсли вы сдали практику - используйте кнопки Меню для уведомления менеджера. Он откроет вам доступ к финальному анкетированию и получению диплома о прохождении курса."
+            practice_info = "\n\nЕсли вы сдали практику - используйте кнопки Меню для уведомления менеджера. Он откроет вам доступ к финальному анкетированию и получению сертификата о прохождении курса."
             message = f"{passed_text}\n\nВаш результат: {score}/{total}{practice_info}"
             
             await self.vk_api.send_message(
@@ -3591,7 +3591,7 @@ class WebServer:
             test_book=cf["test_book"],
             practice=cf["practice"],
             access_survey=cf["access_survey"],
-            diploma=cf["diploma"],
+            certificate=cf["diploma"],
             fortune_wheel=fortune_wheel_spins,
             course_index=course_index
         )
@@ -3914,7 +3914,7 @@ class WebServer:
         if question_id != "start":
             session["answers"][question_id] = button
         
-        # Handle verify_name (verification of user_name for diploma)
+        # Handle verify_name (verification of user_name for certificate)
         if str(question_id) == "verify_name":
             if button == "Верно":
                 await self._finish_final_form(user_id, peer_id)
@@ -3995,9 +3995,9 @@ class WebServer:
         access_field = f"access_survey_{course}"
         await db.update_user_field(user_id, access_field, 2)
         
-        # Make diploma accessible: diploma_X = 1
-        diploma_field = f"diploma_{course}"
-        await db.update_user_field(user_id, diploma_field, 1)
+        # Make certificate accessible: diploma_X = 1
+        certificate_field = f"diploma_{course}"
+        await db.update_user_field(user_id, certificate_field, 1)
         
         print(f"Final form completed for user {user_id}, course {course}", flush=True)
         
@@ -4021,7 +4021,7 @@ class WebServer:
             test_book=cf["test_book"],
             practice=cf["practice"],
             access_survey=cf["access_survey"],
-            diploma=cf["diploma"],
+            certificate=cf["diploma"],
             fortune_wheel=fortune_wheel_spins,
             course_index=course_index
         )
@@ -4035,7 +4035,7 @@ class WebServer:
             keyboard=keyboard
         )
         
-        # Generate and send diploma
+        # Generate and send certificate
         try:
             user_data = await db.get_user(user_id)
             user_name = session.get("user_name", "").strip() or (user_data.get("user_name", "") if user_data else "")
@@ -4046,18 +4046,18 @@ class WebServer:
             today = datetime.now()
             date_str = today.strftime("%d.%m.%Y")
             
-            # Generate diploma (using only user_name, NOT komu_vydan)
-            diploma_data = generate_diploma(course, user_name, date_str)
-            if diploma_data:
-                filename = f"diploma_course_{course}_{user_id}.png"
+            # Generate certificate (using only user_name, NOT komu_vydan)
+            certificate_data = generate_certificate(course, user_name, date_str)
+            if certificate_data:
+                filename = f"certificate_course_{course}_{user_id}.png"
                 await self.vk_api.send_document(
                     peer_id=peer_id,
-                    file_data=diploma_data,
+                    file_data=certificate_data,
                     filename=filename,
-                    message="🎓 Ваш диплом:"
+                    message="🎓 Ваш сертификат:"
                 )
         except Exception as e:
-            logger.error(f"Failed to send diploma to user {user_id}: {e}")
+            logger.error(f"Failed to send certificate to user {user_id}: {e}")
         
         # Notify marketing (USER_MAR_IDS) about final form completion
         if USER_MAR_IDS:
@@ -4151,7 +4151,7 @@ class WebServer:
                     test_book=cf["test_book"],
                     practice=cf["practice"],
                     access_survey=cf["access_survey"],
-                    diploma=cf["diploma"],
+                    certificate=cf["diploma"],
                     fortune_wheel=fortune_wheel_spins,
                     course_index=course_index
                 )
@@ -4183,7 +4183,7 @@ class WebServer:
             test_book=cf["test_book"],
             practice=cf["practice"],
             access_survey=cf["access_survey"],
-            diploma=cf["diploma"],
+            certificate=cf["diploma"],
             fortune_wheel=fortune_wheel_spins,
             course_index=course_index
         )
