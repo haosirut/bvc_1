@@ -112,7 +112,7 @@ logger = logging.getLogger("vk_bot")
 
 # Print startup info
 print("=" * 50, flush=True)
-print("VK BOT STARTING", flush=True)
+print("VK BOT STARTING [v2.1-main]", flush=True)
 print(f"GROUPS CONFIGURED: {len(GROUP_CONFIGS)} ({list(GROUP_CONFIGS.keys())})", flush=True)
 print(f"USER_MEN_IDS (Managers): {USER_MEN_IDS}", flush=True)
 print(f"USER_MAR_IDS (Marketing): {USER_MAR_IDS}", flush=True)
@@ -157,7 +157,23 @@ for _ci in range(1, 5):
 
 TEXTS_DATA = load_json_file("texts.json")
 FORM_DATA = load_json_file("form.json")
-FINAL_FORM_DATA = load_json_file("final_form_1.json")
+# Load final forms per course
+FINAL_FORMS_DATA: Dict[int, Dict] = {}
+for _course_num in [1, 2, 3]:
+    _form_file = f"final_form_{_course_num}.json"
+    _form_path = os.path.join(BASE_DIR, _form_file)
+    if os.path.exists(_form_path):
+        try:
+            with open(_form_path, 'r', encoding='utf-8') as _f:
+                FINAL_FORMS_DATA[_course_num] = json.load(_f)
+            print(f"Loaded {_form_file} successfully", flush=True)
+        except Exception as _e:
+            print(f"Error loading {_form_file}: {_e}", flush=True)
+    else:
+        print(f"Warning: {_form_file} not found, course {_course_num} will use fallback", flush=True)
+
+# Default/fallback: use course 1 form
+FINAL_FORM_DATA = FINAL_FORMS_DATA.get(1, {})
 DIPLOMA_CONFIG = load_json_file("diploma_config.json")
 
 # -----------------------------------------------------------------------------
@@ -1407,7 +1423,7 @@ def create_rating_keyboard(min_val: int = 1, max_val: int = 10) -> Dict:
 
 
 def create_check_data_keyboard() -> Dict:
-    """Keyboard for checking user data in final form (question 13)."""
+    """Keyboard for checking user data in final form (verify_name)."""
     return {
         "one_time": False,
         "inline": False,
@@ -1420,7 +1436,7 @@ def create_check_data_keyboard() -> Dict:
             ],
             [
                 {
-                    "action": {"type": "text", "label": "Изменить ФИ и Кому выдан"},
+                    "action": {"type": "text", "label": "Изменить ФИ"},
                     "color": "primary"
                 }
             ],
@@ -1541,9 +1557,10 @@ def get_correct_answer_text(question: Dict) -> str:
 # -----------------------------------------------------------------------------
 # Final Form Logic
 # -----------------------------------------------------------------------------
-def get_final_form_question(question_id) -> Optional[Dict]:
+def get_final_form_question(question_id, form_data: Optional[Dict] = None) -> Optional[Dict]:
     """Get question from final form by ID (int or str)."""
-    questions = FINAL_FORM_DATA.get("questions", [])
+    data = form_data or FINAL_FORM_DATA
+    questions = data.get("questions", [])
     for q in questions:
         qid = q.get("id")
         if str(qid) == str(question_id):
@@ -1551,9 +1568,9 @@ def get_final_form_question(question_id) -> Optional[Dict]:
     return None
 
 
-def get_next_question_id(current_id, answer: str = None) -> Optional[Any]:
+def get_next_question_id(current_id, answer: str = None, form_data: Optional[Dict] = None) -> Optional[Any]:
     """Get next question ID based on current question and answer."""
-    question = get_final_form_question(current_id)
+    question = get_final_form_question(current_id, form_data)
     if not question:
         return None
     
@@ -1621,7 +1638,7 @@ def generate_diploma(course: int, name: str, date_str: str) -> Optional[bytes]:
     
     Args:
         course: Course number (1-4)
-        name: User name in dative case (komu_vydan)
+        name: User name for diploma
         date_str: Date string to put on diploma
         
     Returns:
@@ -3077,16 +3094,14 @@ class WebServer:
                 
                 # Generate and send diploma
                 try:
-                    komu_vydan = user_data.get("komu_vydan", "") if user_data else ""
-                    if not komu_vydan:
-                        komu_vydan = user_data.get("user_name", "Участник") if user_data else "Участник"
+                    user_name = user_data.get("user_name", "Участник") if user_data else "Участник"
                     
                     # Get current date
                     today = datetime.now()
                     date_str = today.strftime("%d.%m.%Y")
                     
-                    # Generate diploma for current course
-                    diploma_data = generate_diploma(course_index, komu_vydan, date_str)
+                    # Generate diploma for current course (using only user_name)
+                    diploma_data = generate_diploma(course_index, user_name, date_str)
                     if diploma_data:
                         filename = f"diploma_course_{course_index}_{user_id}.png"
                         await self.vk_api.send_document(
@@ -3680,10 +3695,16 @@ class WebServer:
             keyboard=create_final_form_open_keyboard()
         )
         
-        # Get user data for name_case
-        user_name = user_data.get("user_name", "") if user_data else ""
-        user_name_case = user_data.get("user_name_case", "") if user_data else ""
+        # Load form data for this course
+        form_data = FINAL_FORMS_DATA.get(course)
+        if not form_data:
+            form_data = FINAL_FORM_DATA
+            logger.warning(f"Form file for course {course} not found, using fallback (course 1)")
         
+        # Get user name
+        user_name = user_data.get("user_name", "") if user_data else ""
+        
+        # Store form_data in session for per-course form handling
         # Initialize session
         FINAL_FORM_SESSIONS[user_id] = {
             "course": course,
@@ -3691,8 +3712,7 @@ class WebServer:
             "current_question": "start",  # Start with "Начать" button
             "answers": {},
             "user_name": user_name,
-            "user_name_case": user_name_case,
-            "komu_vydan": user_data.get("komu_vydan", "Иванову Ивану") if user_data else "Иванову Ивану"
+            "form_data": form_data
         }
         
         # Send first question
@@ -3706,7 +3726,8 @@ class WebServer:
             return
         
         question_id = session["current_question"]
-        question = get_final_form_question(question_id)
+        form_data = session.get("form_data", FINAL_FORM_DATA)
+        question = get_final_form_question(question_id, form_data)
         
         if not question:
             print(f"Question not found: {question_id}", flush=True)
@@ -3718,10 +3739,6 @@ class WebServer:
         # Substitute variables in question text
         if "{user_name}" in question_text:
             question_text = question_text.replace("{user_name}", session.get("user_name", ""))
-        if "{user_name_case}" in question_text:
-            question_text = question_text.replace("{user_name_case}", session.get("user_name_case", ""))
-        if "{komu_vydan}" in question_text:
-            question_text = question_text.replace("{komu_vydan}", session.get("komu_vydan", ""))
         
         # Send question text without prefix
         message = question_text
@@ -3775,7 +3792,8 @@ class WebServer:
             return
         
         question_id = session["current_question"]
-        question = get_final_form_question(question_id)
+        form_data = session.get("form_data", FINAL_FORM_DATA)
+        question = get_final_form_question(question_id, form_data)
         
         if not question:
             return
@@ -3786,16 +3804,19 @@ class WebServer:
         # Check if this question updates user fields
         update_field = question.get("update_field")
         if update_field:
-            await db.update_user_field(user_id, update_field, answer)
+            if not answer or len(answer.strip()) > 200:
+                await self._send_message(peer_id, "Введите корректные данные (до 200 символов)")
+                return
+            await db.update_user_field(user_id, update_field, answer.strip())
             if update_field == "user_name":
-                session["user_name"] = answer
-            elif update_field == "user_name_case":
-                session["user_name_case"] = answer
-            elif update_field == "komu_vydan":
-                session["komu_vydan"] = answer
+                session["user_name"] = answer.strip()
+                # After editing name, go back to verify_name
+                session["current_question"] = "verify_name"
+                await self._send_final_form_question(user_id, peer_id)
+                return
         
         # Get next question
-        next_question = get_next_question_id(question_id, answer)
+        next_question = get_next_question_id(question_id, answer, form_data)
         
         if next_question == "finish" or next_question is None:
             await self._finish_final_form(user_id, peer_id)
@@ -3812,7 +3833,8 @@ class WebServer:
             return
         
         question_id = session["current_question"]
-        question = get_final_form_question(question_id)
+        form_data = session.get("form_data", FINAL_FORM_DATA)
+        question = get_final_form_question(question_id, form_data)
         
         if not question:
             return
@@ -3834,18 +3856,18 @@ class WebServer:
         if question_id != "start":
             session["answers"][question_id] = button
         
-        # Get next question
-        next_question = get_next_question_id(question_id, button)
-        
-        # Handle special buttons for question 13
-        if question_id == 13 or str(question_id) == "13":
+        # Handle verify_name (verification of user_name for diploma)
+        if str(question_id) == "verify_name":
             if button == "Верно":
                 await self._finish_final_form(user_id, peer_id)
                 return
-            elif button == "Изменить ФИ и Кому выдан":
-                session["current_question"] = 14
+            elif button == "Изменить ФИ":
+                session["current_question"] = "edit_name"
                 await self._send_final_form_question(user_id, peer_id)
                 return
+        
+        # Get next question
+        next_question = get_next_question_id(question_id, button, form_data)
         
         if next_question == "finish" or next_question is None:
             await self._finish_final_form(user_id, peer_id)
@@ -3864,12 +3886,13 @@ class WebServer:
         answers = session["answers"]  # Format: {question_id: answer}
         
         # Build question texts dictionary for formatting
+        form_data = session.get("form_data", FINAL_FORM_DATA)
         question_texts = {}
-        for q in FINAL_FORM_DATA.get("questions", []):
+        for q in form_data.get("questions", []):
             qid = q.get("id")
             qtext = q.get("question", "")
             # Remove variable placeholders for storage
-            qtext_clean = qtext.replace("{user_name}", "").replace("{user_name_case}", "").replace("{komu_vydan}", "").strip()
+            qtext_clean = qtext.replace("{user_name}", "").strip()
             question_texts[qid] = qtext_clean
         
         # Format answers with question text (same format as initial form)
@@ -3957,16 +3980,16 @@ class WebServer:
         # Generate and send diploma
         try:
             user_data = await db.get_user(user_id)
-            komu_vydan = user_data.get("komu_vydan", "") if user_data else ""
-            if not komu_vydan:
-                komu_vydan = user_data.get("user_name", "Участник") if user_data else "Участник"
+            user_name = session.get("user_name", "").strip() or (user_data.get("user_name", "") if user_data else "")
+            if not user_name:
+                user_name = "Участник"
             
             # Get current date
             today = datetime.now()
             date_str = today.strftime("%d.%m.%Y")
             
-            # Generate diploma
-            diploma_data = generate_diploma(course, komu_vydan, date_str)
+            # Generate diploma (using only user_name, NOT komu_vydan)
+            diploma_data = generate_diploma(course, user_name, date_str)
             if diploma_data:
                 filename = f"diploma_course_{course}_{user_id}.png"
                 await self.vk_api.send_document(
@@ -4148,6 +4171,27 @@ class WebServer:
 # -----------------------------------------------------------------------------
 # Entrypoint
 # -----------------------------------------------------------------------------
+
+# TODO: ПРИ СЛЕДУЮЩЕМ ОБРАЩЕНИИ К АГЕНТУ — УДАЛИТЬ ФУНКЦИЮ run_db_column_cleanup() И ЕЁ ВЫЗОВ.
+# TODO: [МИГРАЦИЯ] УДАЛИТЬ ЭТУ ФУНКЦИЮ ПОСЛЕ УСПЕШНОГО ВЫПОЛНЕНИЯ
+async def run_db_column_cleanup():
+    """Удаляет устаревшие столбцы, если они существуют."""
+    columns_to_drop = ["komu_vydan", "user_name_case", "ФИ_Датапд"]
+    logger.info("🔄 Запуск очистки устаревших столбцов БД...")
+    
+    async with db.pool.acquire() as conn:
+        for col in columns_to_drop:
+            try:
+                await conn.execute(f'''
+                    ALTER TABLE users 
+                    DROP COLUMN IF EXISTS "{col}"
+                ''')
+                logger.info(f"✅ Столбец '{col}' успешно удалён или отсутствует.")
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка при удалении столбца '{col}': {e}")
+    logger.info("✅ Миграция очистки БД завершена.")
+
+
 async def async_main():
     """Async main entrypoint."""
     print("Creating web server...", flush=True)
@@ -4155,6 +4199,10 @@ async def async_main():
     
     # Initialize database
     await db.init()
+    
+    # TODO: Раскомментировать для одноразового запуска миграции, затем удалить
+    # if os.getenv("RUN_MIGRATION") == "1":
+    #     await run_db_column_cleanup()
     
     runner = web.AppRunner(server.app)
     await runner.setup()
@@ -4175,4 +4223,3 @@ async def async_main():
 
 if __name__ == "__main__":
     asyncio.run(async_main())
-
