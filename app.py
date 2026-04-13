@@ -1634,7 +1634,7 @@ def is_physical_prize(prize_name: str) -> bool:
 # Certificate Generation
 # -----------------------------------------------------------------------------
 def generate_certificate(course: int, name: str, date_str: str) -> Optional[bytes]:
-    """Generate certificate image with name and date.
+    """Generate certificate image with course number, name and date.
     
     Args:
         course: Course number (1-4)
@@ -1648,17 +1648,8 @@ def generate_certificate(course: int, name: str, date_str: str) -> Optional[byte
         logger.error("Certificate config not loaded")
         return None
     
-    course_config = CERTIFICATE_CONFIG.get("courses", {}).get(str(course))
-    if not course_config or not course_config.get("enabled"):
-        logger.warning(f"Certificate not available for course {course}")
-        return None
-    
-    template_path = course_config.get("template")
-    if not template_path:
-        logger.error(f"No template for course {course}")
-        return None
-    
-    # Full path to template
+    # Single template for all courses
+    template_path = CERTIFICATE_CONFIG.get("template", "sert/sert.jpg")
     template_full_path = os.path.join(BASE_DIR, template_path)
     if not os.path.exists(template_full_path):
         logger.error(f"Template not found: {template_full_path}")
@@ -1670,66 +1661,60 @@ def generate_certificate(course: int, name: str, date_str: str) -> Optional[byte
         logger.error(f"Font not found: {font_path}")
         return None
     
+    # Global font size and colors from config
+    font_size = CERTIFICATE_CONFIG.get("font_size", 88)
+    stroke_width = CERTIFICATE_CONFIG.get("stroke_width", 0)
+    text_color_cfg = CERTIFICATE_CONFIG.get("text_color", {"r": 255, "g": 255, "b": 255})
+    text_rgb = (int(text_color_cfg.get("r", 255)), int(text_color_cfg.get("g", 255)), int(text_color_cfg.get("b", 255)))
+    
+    # Course number text: "1-й", "2-й", "3-й", "4-й"
+    course_labels = {1: "1-й", 2: "2-й", 3: "3-й", 4: "4-й"}
+    course_text = course_labels.get(course, f"{course}-й")
+    
     try:
         # Open template image
         img = Image.open(template_full_path)
         draw = ImageDraw.Draw(img)
         
-        # Get image dimensions
-        img_width, img_height = img.size
+        font = ImageFont.truetype(font_path, font_size)
         
-        # Get field configs
+        # Get field configs (pixel-based coordinates)
         fields = CERTIFICATE_CONFIG.get("fields", {})
+        
+        # Prepare field texts
+        field_texts = {}
+        for field_name, field_config in fields.items():
+            if field_name == "course":
+                field_texts[field_name] = course_text
+            elif field_name == "name":
+                field_texts[field_name] = name.upper() if field_config.get("uppercase", False) else name
+            elif field_name == "date":
+                field_texts[field_name] = date_str
+            else:
+                continue
         
         # Draw each field
         for field_name, field_config in fields.items():
-            if field_name == "name":
-                text = name.upper() if field_config.get("uppercase", True) else name
-            elif field_name == "date":
-                text = date_str.upper() if field_config.get("uppercase", True) else date_str
-            else:
+            if field_name not in field_texts:
                 continue
             
-            # Calculate font size from percentage of image height
-            font_size_percent = field_config.get("font_size_percent", 3.5)
-            font_size = int(img_height * font_size_percent / 100)
-            font = ImageFont.truetype(font_path, font_size)
+            text = field_texts[field_name]
+            x = field_config.get("x", 893)
+            y = field_config.get("y", 867)
+            alignment = field_config.get("alignment", "center")
+            vertical_align = field_config.get("vertical_align", "bottom")
             
-            # Calculate stroke width from percentage of font size
-            stroke_width_percent = field_config.get("stroke_width_percent", 7.0)
-            stroke_width = int(font_size * stroke_width_percent / 100)
-            
-            # Calculate position from percentages
-            top_percent = field_config.get("top_percent", 50)
-            left_percent = field_config.get("left_percent", 50)
-            
-            # Y position from top (percentage of image height)
-            y = int(img_height * top_percent / 100)
-            # X position from left (percentage of image width)
-            x = int(img_width * left_percent / 100)
-            
-            # Get colors
-            text_color = field_config.get("text_color", {"r": 28, "g": 58, "b": 105})
-            stroke_color = field_config.get("stroke_color", {"r": 255, "g": 255, "b": 255})
-            
-            text_rgb = (int(text_color.get("r", 28)), int(text_color.get("g", 58)), int(text_color.get("b", 105)))
-            stroke_rgb = (int(stroke_color.get("r", 255)), int(stroke_color.get("g", 255)), int(stroke_color.get("b", 255)))
-            
-            # Get text bbox for alignment
+            # Get text bbox
             bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
             text_width = bbox[2] - bbox[0]
             text_height = bbox[3] - bbox[1]
-            
-            # Apply alignment
-            alignment = field_config.get("alignment", "center")
-            vertical_align = field_config.get("vertical_align", "bottom")
             
             # Horizontal alignment
             if alignment == "center":
                 draw_x = x - text_width / 2
             elif alignment == "right":
                 draw_x = x - text_width
-            else:  # left
+            else:
                 draw_x = x
             
             # Vertical alignment
@@ -1737,20 +1722,19 @@ def generate_certificate(course: int, name: str, date_str: str) -> Optional[byte
                 draw_y = y - text_height
             elif vertical_align == "center":
                 draw_y = y - text_height / 2
-            else:  # top
+            else:
                 draw_y = y
             
             # Adjust for font baseline
             draw_y -= bbox[1]
             
-            # Draw text with stroke (coordinates must be integers)
+            # Draw text (no stroke since stroke_width=0)
             draw.text(
                 (int(draw_x), int(draw_y)),
                 text,
                 font=font,
                 fill=text_rgb,
-                stroke_width=stroke_width,
-                stroke_fill=stroke_rgb
+                stroke_width=stroke_width
             )
         
         # Save to bytes

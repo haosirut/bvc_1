@@ -1,45 +1,28 @@
 {
-  "courses": {
-    "1": {
-      "template": "sert/sert_1.png",
-      "enabled": true
-    },
-    "2": {
-      "template": "sert/sert_2.png",
-      "enabled": true
-    },
-    "3": {
-      "template": "sert/sert_3.png",
-      "enabled": true
-    },
-    "4": {
-      "template": null,
-      "enabled": false
-    }
-  },
+  "template": "sert/sert.jpg",
   "font": "sert/RussoOne-Regular.ttf",
+  "font_size": 88,
+  "text_color": {"r": 255, "g": 255, "b": 255},
+  "stroke_width": 0,
   "fields": {
+    "course": {
+      "x": 886,
+      "y": 847,
+      "alignment": "center",
+      "vertical_align": "bottom"
+    },
     "name": {
-      "top_percent": 46.6,
-      "left_percent": 50.0,
+      "x": 893,
+      "y": 667,
       "alignment": "center",
       "vertical_align": "bottom",
-      "uppercase": true,
-      "font_size_percent": 5.0,
-      "stroke_width_percent": 5.0,
-      "text_color": {"r": 2, "g": 53, "b": 112},
-      "stroke_color": {"r": 255, "g": 255, "b": 255}
+      "uppercase": true
     },
     "date": {
-      "top_percent": 88.6,
-      "left_percent": 22.8,
+      "x": 406,
+      "y": 1119,
       "alignment": "center",
-      "vertical_align": "bottom",
-      "uppercase": true,
-      "font_size_percent": 4.0,
-      "stroke_width_percent": 5.0,
-      "text_color": {"r": 2, "g": 53, "b": 112},
-      "stroke_color": {"r": 255, "g": 255, "b": 255}
+      "vertical_align": "bottom"
     }
   },
   "output_format": "PNG"
