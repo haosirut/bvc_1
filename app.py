@@ -1676,8 +1676,6 @@ def generate_certificate(course: int, name: str, date_str: str) -> Optional[byte
         img = Image.open(template_full_path)
         draw = ImageDraw.Draw(img)
         
-        font = ImageFont.truetype(font_path, font_size)
-        
         # Get field configs (pixel-based coordinates)
         fields = CERTIFICATE_CONFIG.get("fields", {})
         
@@ -1704,8 +1702,12 @@ def generate_certificate(course: int, name: str, date_str: str) -> Optional[byte
             alignment = field_config.get("alignment", "center")
             vertical_align = field_config.get("vertical_align", "bottom")
             
+            # Per-field font size, fallback to global
+            field_font_size = field_config.get("font_size", font_size)
+            field_font = ImageFont.truetype(font_path, field_font_size)
+            
             # Get text bbox
-            bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
+            bbox = draw.textbbox((0, 0), text, font=field_font, stroke_width=stroke_width)
             text_width = bbox[2] - bbox[0]
             text_height = bbox[3] - bbox[1]
             
@@ -1732,7 +1734,7 @@ def generate_certificate(course: int, name: str, date_str: str) -> Optional[byte
             draw.text(
                 (int(draw_x), int(draw_y)),
                 text,
-                font=font,
+                font=field_font,
                 fill=text_rgb,
                 stroke_width=stroke_width
             )
