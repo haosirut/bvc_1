@@ -1,8 +1,8 @@
 {
   "test_info": {
     "title": "Тестирование 3 курс",
-    "passing_score": 14,
-    "total_questions": 16
+    "passing_score": 15,
+    "total_questions": 17
   },
   "variants": [
     {
@@ -340,6 +340,27 @@
             {
               "id": 1,
               "text": "Помолиться для победы",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 17,
+          "question": "Для чего мы стараемся всю игру свести внутрь фишек?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Для упрощения игры",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Для того, чтобы запутать соперника",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Для того, чтобы не тратить силы",
               "is_correct": false
             }
           ]
@@ -684,6 +705,27 @@
               "is_correct": false
             }
           ]
+        },
+        {
+          "question_number": 17,
+          "question": "Для чего мы стараемся всю игру свести внутрь фишек?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Для упрощения игры",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Для того, чтобы запутать соперника",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Для того, чтобы не тратить силы",
+              "is_correct": false
+            }
+          ]
         }
       ]
     },
@@ -1022,6 +1064,27 @@
             {
               "id": 3,
               "text": "Оттянуться по диагонали",
+              "is_correct": false
+            }
+          ]
+        },
+        {
+          "question_number": 17,
+          "question": "Для чего мы стараемся всю игру свести внутрь фишек?",
+          "answers": [
+            {
+              "id": 1,
+              "text": "Для упрощения игры",
+              "is_correct": true
+            },
+            {
+              "id": 2,
+              "text": "Для того, чтобы запутать соперника",
+              "is_correct": false
+            },
+            {
+              "id": 3,
+              "text": "Для того, чтобы не тратить силы",
               "is_correct": false
             }
           ]
